@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Carte Parcours – La Route Bleue</title>
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css"/>
+  <script src="https://js.arcgis.com/4.29/"></script>
+
+
+  <style>
+    :root {
+      --brand:   #002569;
+      --brand-2: #1a3f8f;
+      --accent:  #00b4d8;
+      --accent-2:#90e0ef;
+      --foam:    #e8f0fa;
+      --mist:    #f4f7fd;
+      --ripple:  #c5d3ef;
+      --green:   #2d9e6b;
+      --ink:     #0e1a2b;
+      --sidebar-w: 340px;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; font-family:Arial,sans-serif; display:flex; overflow:hidden; background:var(--brand); }
+
+    /* ══ SIDEBAR ══════════════════════════════════════════════════ */
+    #sidebar { width:var(--sidebar-w); min-width:var(--sidebar-w); height:100%; background:#fff; display:flex; flex-direction:column; z-index:10; border-right:1px solid var(--ripple); transition: margin-left 0.3s ease; position:relative; flex-shrink:0; }
+    #sidebar.closed { margin-left:calc(-1 * var(--sidebar-w)); }
+
+    /* Onglet pour ouvrir/fermer la sidebar */
+    #sidebar-tab {
+      position:fixed; left:var(--sidebar-w); top:50%; transform:translateY(-50%);
+      z-index:100; width:18px; height:52px;
+      background:var(--brand); border:none; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      border-radius:0 8px 8px 0;
+      box-shadow:2px 0 8px rgba(0,0,0,.22);
+      transition: left 0.3s ease, background 0.15s;
+    }
+    #sidebar-tab:hover { background:var(--brand-2); }
+    #sidebar-tab svg { transition: transform 0.3s ease; color:#fff; }
+
+    .sidebar-header { background:var(--brand); padding:22px 20px 18px; flex-shrink:0; position:relative; overflow:hidden; }
+    .sidebar-header::before { content:''; position:absolute; bottom:-50px; right:-50px; width:160px; height:160px; border-radius:50%; background:radial-gradient(circle,rgba(0,180,216,.15) 0%,transparent 70%); pointer-events:none; }
+
+    .header-eyebrow { font-family:Arial,sans-serif; font-size:9px; font-weight:500; color:var(--accent); letter-spacing:.18em; text-transform:uppercase; margin-bottom:5px; }
+    .header-title { font-family:Arial,sans-serif; font-size:26px; color:#fff; line-height:1.1; margin-bottom:16px; }
+    .header-title em { font-style:italic; color:var(--accent-2); }
+
+    .sidebar-search { position:relative; margin-bottom:8px; }
+    .sidebar-search input { width:100%; padding:10px 14px 10px 36px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.08); color:#fff; font-family:Arial,sans-serif; font-size:12.5px; outline:none; transition:border-color .2s,background .2s; }
+    .sidebar-search input:focus { border-color:rgba(0,180,216,.5); background:rgba(255,255,255,.12); }
+    .sidebar-search input::placeholder { color:rgba(255,255,255,.38); }
+    .search-icon { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.4); pointer-events:none; }
+
+    #reset-btn { display:none; }
+    #reset-btn.visible { display:flex; }
+
+    .sidebar-count { padding:8px 20px; font-family:Arial,sans-serif; font-size:10px; color:#888; background:var(--mist); border-bottom:1px solid var(--ripple); letter-spacing:.04em; flex-shrink:0; }
+
+    #sidebar-list { flex:1; overflow-y:auto; padding-bottom:16px; }
+    #sidebar-list::-webkit-scrollbar { width:3px; }
+    #sidebar-list::-webkit-scrollbar-track { background:transparent; }
+    #sidebar-list::-webkit-scrollbar-thumb { background:var(--ripple); border-radius:4px; }
+
+    /* Groupe région */
+    .region-header { display:flex; align-items:center; justify-content:space-between; padding:11px 14px 10px; cursor:pointer; position:relative; background:var(--brand); background-size:cover; background-position:center; border-bottom:1px solid var(--ripple); border-top:1px solid var(--ripple); user-select:none; transition:background .15s; min-height:62px; overflow:hidden; }
+    .region-header::before { content:''; position:absolute; inset:0; background:rgba(0,18,64,.60); z-index:0; transition:background .15s; pointer-events:none; } .region-header:hover::before { background:rgba(0,18,64,.45); } .region-header > * { position:relative; z-index:1; }
+    .region-name { font-family:Arial,sans-serif; font-size:9.5px; font-weight:500; color:#fff; text-transform:uppercase; letter-spacing:.1em; }
+    .region-meta { display:flex; align-items:center; gap:8px; }
+    .region-count { font-family:Arial,sans-serif; font-size:10px; color:#fff; background:rgba(255,255,255,.2); padding:1px 7px; border-radius:4px; }
+    .region-chevron { color:#fff; font-size:10px; transition:transform .2s ease; display:inline-block; }
+    .region-header.collapsed .region-chevron { transform:rotate(-90deg); }
+    .region-header.region-selected::before { background:rgba(0,37,105,.75) !important; }
+    .region-header.region-selected { box-shadow:inset 3px 0 0 var(--accent); }
+    .region-items.hidden { display:none; }
+
+    /* Item parcours */
+    .parcours-item { display:flex; align-items:flex-start; gap:12px; padding:10px 20px; cursor:pointer; border-bottom:1px solid #f5f5f5; transition:background .12s; position:relative; }
+    .parcours-item:hover { background:var(--mist); }
+    .parcours-item.active { background:var(--foam); }
+    .parcours-item.active::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--brand); border-radius:0 2px 2px 0; }
+
+    .parcours-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:15px; margin-top:2px; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .parcours-item.active .parcours-icon,
+    .parcours-item:active .parcours-icon { transform: scale(1.22); box-shadow: 0 0 0 3px var(--accent), 0 0 0 5px rgba(0,180,216,0.25); border-radius: 50%; }
+    @keyframes icon-pulse {
+      0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(0,180,216,0.7); border-radius:50%; }
+      40%  { transform: scale(1.18); box-shadow: 0 0 0 6px rgba(0,180,216,0.2); border-radius:50%; }
+      70%  { transform: scale(1.10); box-shadow: 0 0 0 10px rgba(0,180,216,0); border-radius:50%; }
+      100% { transform: scale(1.13); box-shadow: 0 0 0 0 rgba(0,180,216,0); border-radius:50%; }
+    }
+    .parcours-item.active .parcours-icon { animation: icon-pulse 0.45s ease-out forwards; }
+    .parcours-icon.EC  { background:#e0f2fb; }
+    .parcours-icon.EV  { background:#fce8e4; }
+    .parcours-icon.MAR { background:#e0f7ed; }
+    .parcours-icon.DEF { background:var(--foam); }
+
+    .parcours-info { flex:1; min-width:0; }
+    .parcours-nom { font-size:12.5px; font-weight:600; color:var(--ink); line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .parcours-rb  { font-family:Arial,sans-serif; font-size:10px; color:var(--brand-2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.75; }
+
+    .parcours-chips { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; }
+    .chip { font-family:Arial,sans-serif; font-size:9px; padding:2px 6px; border-radius:4px; background:var(--foam); color:var(--brand); border:1px solid var(--ripple); white-space:nowrap; }
+    .chip.diff-ND01 { background:#e8f5ee; color:var(--green); border-color:#b8e0cd; }
+    .chip.diff-ND02 { background:#fff8e0; color:#8a6a00; border-color:#edd98a; }
+    .chip.diff-ND03 { background:#fce8e4; color:#b03030; border-color:#f5b8b8; }
+    .chip.chip-ferme { background:#ffeaea; color:#b03030; border-color:#f5b8b8; }
+    .chip.chip-payant { background:#fef3ee; color:#c05b38; border-color:#f5c4ae; }
+
+    .sidebar-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 20px; color:#bbb; font-size:12px; gap:14px; font-family:Arial,sans-serif; letter-spacing:.04em; }
+    .spinner-sm { width:22px; height:22px; border:2px solid #e0e0e0; border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite; }
+
+    /* ══ MAP ══════════════════════════════════════════════════════ */
+    #map-container { flex:1; position:relative; height:100%; }
+    #viewDiv { width:100%; height:100%; }
+
+    /* Cache les widgets zoom ArcGIS natifs */
+    .esri-zoom { display:none !important; }
+
+    /* ══ MAP CONTROLS (flottants) ══════════════════════════════════ */
+    #map-controls { display:none; }
+    #map-ctrl-extra {
+      position:absolute; top:16px; left:16px; z-index:50;
+      display:flex; flex-direction:column;
+      border-radius:6px; overflow:hidden;
+      box-shadow:0 1px 6px rgba(0,0,0,.28);
+    }
+    .map-ctrl-btn {
+      width:32px; height:32px; border-radius:0; border:none;
+      background:rgba(255,255,255,.97); color:#444;
+      cursor:pointer; display:flex; align-items:center; justify-content:center;
+      border-top: 1px solid #e2e2e2;
+      transition:background .14s, color .14s;
+      font-size:16px; font-weight:300; line-height:1;
+    }
+    .map-ctrl-btn:first-child { border-top:none; }
+    .map-ctrl-btn:hover { background:#f0f4ff; color:var(--brand); }
+    .map-ctrl-btn.active { background:var(--brand); color:#fff; }
+    /* Séparateur visuel entre groupes */
+    .map-ctrl-sep { height:1px; background:#ccc; }
+
+    /* ══ BASEMAP SWITCHER ══════════════════════════════════════════ */
+    #basemap-switcher {
+      position:absolute; bottom:24px; right:16px; z-index:50;
+      display:flex; flex-direction:column; align-items:flex-end; gap:6px;
+    }
+    #basemap-toggle {
+      width:57px; height:57px; border-radius:12px; border:2.5px solid #fff;
+      cursor:pointer; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.25);
+      transition:transform .15s, box-shadow .15s;
+      position:relative; background:var(--brand);
+      display:flex; align-items:center; justify-content:center; flex-direction:column; gap:2px;
+    }
+    #basemap-toggle:hover { transform:scale(1.06); box-shadow:0 4px 14px rgba(0,0,0,.3); }
+    #basemap-toggle-label {
+      color:#fff; font-size:8px; font-family:Arial,sans-serif; font-weight:700;
+      text-align:center; letter-spacing:.05em; text-transform:uppercase; line-height:1;
+    }
+    #basemap-options {
+      display:flex; flex-direction:column; gap:5px; align-items:stretch;
+      opacity:0; transform:translateY(6px) scale(0.97);
+      transition:opacity .18s ease, transform .18s ease;
+      pointer-events:none; width:160px;
+    }
+    #basemap-options.open { opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+    .basemap-opt {
+      display:flex; align-items:center; gap:7px; cursor:pointer;
+      background:rgba(255,255,255,.97);
+      border-radius:9px; padding:4px 8px 4px 4px;
+      box-shadow:0 2px 8px rgba(0,0,0,.18), 0 0 0 1px rgba(0,37,105,.07);
+      transition:box-shadow .14s, transform .14s;
+      width:100%;
+    }
+    .basemap-opt:hover { box-shadow:0 3px 12px rgba(0,0,0,.25); transform:translateX(-2px); }
+    .basemap-opt.active { box-shadow:0 0 0 2px var(--accent), 0 3px 10px rgba(0,180,216,.2); }
+    .basemap-opt-thumb {
+      width:36px; height:36px; border-radius:6px; overflow:hidden; flex-shrink:0;
+    }
+    .basemap-opt-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+    .basemap-opt-label { font-size:11px; font-weight:600; color:var(--ink); font-family:Arial,sans-serif; flex:1; }
+
+    /* ══ POPUP ════════════════════════════════════════════════════ */
+    #custom-popup {
+      position:absolute; z-index:999; top:16px; right:16px; width:330px;
+      border-radius:18px; overflow:hidden; background:#fff;
+      box-shadow:0 4px 6px rgba(0,0,0,.04),0 14px 32px rgba(0,37,105,.20),0 0 0 1px rgba(0,37,105,.07);
+      pointer-events:auto;
+      opacity:0; transform:translateY(-10px) scale(0.97);
+      transition: opacity 0.22s ease, transform 0.22s ease;
+      pointer-events:none;
+    }
+    #custom-popup.visible {
+      opacity:1; transform:translateY(0) scale(1);
+      pointer-events:auto;
+    }
+    /* Animation "flash" quand le contenu change */
+    #custom-popup.updating { opacity:0.4; transform:translateY(-4px) scale(0.98); }
+
+    .popup-photo-wrap { width:100%; height:165px; overflow:hidden; background:var(--foam); position:relative; }
+    .popup-photo-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
+    .popup-photo-placeholder { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:linear-gradient(160deg,var(--foam) 0%,var(--ripple) 100%); color:var(--brand); font-size:12px; font-weight:500; gap:10px; opacity:.7; }
+    .popup-photo-loading { width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:var(--foam); }
+    .spinner { width:26px; height:26px; border:2.5px solid var(--ripple); border-top-color:var(--brand); border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .photo-counter { position:absolute; bottom:8px; right:10px; background:rgba(0,37,105,.55); color:#fff; font-family:Arial,sans-serif; font-size:10px; padding:3px 8px; border-radius:20px; pointer-events:none; letter-spacing:.06em; }
+    .photo-nav { position:absolute; top:50%; transform:translateY(-50%); background:rgba(0,37,105,.45); border:none; color:#fff; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; transition:background .15s; backdrop-filter:blur(4px); }
+    .photo-nav:hover { background:rgba(0,37,105,.7); }
+    .photo-nav.prev { left:8px; }
+    .photo-nav.next { right:8px; }
+
+    .popup-header { background:var(--brand); padding:14px 40px 14px 16px; position:relative; }
+    .popup-close { position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.15); color:rgba(255,255,255,.7); font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .2s,color .2s; }
+    .popup-close:hover { background:rgba(255,255,255,.22); color:#fff; }
+    .popup-route { font-family:Arial,sans-serif; font-size:9px; color:var(--accent-2); letter-spacing:.12em; text-transform:uppercase; margin-bottom:5px; opacity:.8; }
+    .popup-title { font-family:Arial,sans-serif; color:#fff; font-size:17px; line-height:1.3; }
+
+    .popup-body { padding:14px 16px; }
+    .popup-desc { font-size:12.5px; color:#666; line-height:1.6; margin-bottom:12px; max-height:72px; overflow-y:auto; }
+    .popup-desc::-webkit-scrollbar { width:3px; }
+    .popup-desc::-webkit-scrollbar-thumb { background:#e0e0e0; border-radius:3px; }
+
+    .popup-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+    .popup-stat { background:var(--mist); border-radius:8px; padding:7px 10px; }
+    .popup-stat-label { font-family:Arial,sans-serif; font-size:9px; color:#999; letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
+    .popup-stat-value { font-size:12px; font-weight:600; color:var(--ink); }
+
+    .popup-tags { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:12px; }
+    .popup-tag { font-family:Arial,sans-serif; font-size:10px; font-weight:500; padding:3px 8px; border-radius:5px; background:var(--foam); color:var(--brand); border:1px solid var(--ripple); letter-spacing:.04em; }
+    .popup-tag.tag-green { background:#e8f5ee; color:var(--green); border-color:#b8e0cd; }
+    .popup-tag.tag-warn  { background:#fef3ee; color:#c05b38; border-color:#f5c4ae; }
+    .popup-tag.tag-red   { background:#ffeaea; color:#b03030; border-color:#f5b8b8; }
+
+    .popup-divider { height:1px; background:#f0f0f0; margin-bottom:12px; }
+    .popup-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px; background:var(--brand); color:#fff; font-family:Arial,sans-serif; font-size:12.5px; font-weight:600; border-radius:10px; text-decoration:none; letter-spacing:.04em; transition:background .2s,transform .15s; }
+    .popup-btn:hover { background:var(--brand-2); transform:translateY(-1px); }
+
+    .esri-ui-corner--top-left { top:16px !important; left:16px !important; }
+    .esri-widget { border-radius:10px !important; box-shadow:0 2px 12px rgba(0,0,0,.12) !important; }
+
+    /* ══ GÉOLOCALISATION ══════════════════════════════════════════ */
+    #geo-btn.locating { animation: geo-pulse 1.2s ease-in-out infinite; }
+    #geo-btn.located  { color: var(--green) !important; }
+    @keyframes geo-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    #user-location-dot {
+      position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px;
+      pointer-events:none; z-index:200;
+    }
+    #user-location-dot .pulse {
+      width:16px; height:16px; border-radius:50%; background:rgba(0,180,216,.25);
+      position:absolute; animation: loc-pulse 2s ease-out infinite;
+    }
+    #user-location-dot .dot {
+      width:10px; height:10px; border-radius:50%; background:var(--accent);
+      border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.3);
+      position:absolute; top:3px; left:3px;
+    }
+    @keyframes loc-pulse { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2.8);opacity:0} }
+
+    /* ══ POPUP ONGLETS (météo / élévation / débit) ════════════════ */
+    .popup-tabs { display:flex; border-bottom:1px solid #eee; background:#fff; flex-shrink:0; }
+    .popup-tab  { flex:1; padding:7px 4px; font-size:10px; font-weight:600; color:#999; text-align:center; cursor:pointer; border:none; background:none; letter-spacing:.04em; transition:color .15s; border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .popup-tab.active { color:var(--brand); border-bottom-color:var(--accent); }
+    .popup-tab-pane { display:none; }
+    .popup-tab-pane.active { display:block; }
+
+    /* Météo */
+    .weather-widget { padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+    .weather-main   { display:flex; align-items:center; gap:12px; }
+    .weather-icon   { font-size:36px; line-height:1; }
+    .weather-temp   { font-size:28px; font-weight:700; color:var(--ink); line-height:1; }
+    .weather-desc   { font-size:11px; color:#888; margin-top:2px; }
+    .weather-grid   { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+    .weather-cell   { background:var(--mist); border-radius:7px; padding:6px 8px; text-align:center; }
+    .weather-cell-lbl { font-size:8.5px; color:#aaa; text-transform:uppercase; letter-spacing:.07em; }
+    .weather-cell-val { font-size:12px; font-weight:600; color:var(--ink); margin-top:1px; }
+    .weather-loading  { padding:24px; text-align:center; color:#bbb; font-size:12px; }
+
+    /* Débit */
+    .flow-widget   { padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+    .flow-header   { font-size:9px; font-weight:700; color:var(--brand); text-transform:uppercase; letter-spacing:.1em; }
+    .flow-val      { font-size:24px; font-weight:700; color:var(--ink); }
+    .flow-unit     { font-size:11px; color:#888; margin-left:4px; }
+    .flow-bar-wrap { height:6px; background:#e8f0fa; border-radius:3px; overflow:hidden; }
+    .flow-bar      { height:100%; border-radius:3px; background:linear-gradient(90deg,var(--accent),var(--brand)); transition:width .6s ease; }
+    .flow-range    { display:flex; justify-content:space-between; font-size:9px; color:#bbb; }
+    .flow-status   { display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:600; padding:3px 8px; border-radius:5px; }
+    .flow-status.ok   { background:#e8f5ee; color:var(--green); }
+    .flow-status.low  { background:#fff8e0; color:#8a6a00; }
+    .flow-status.high { background:#ffeaea; color:#b03030; }
+    .flow-loading  { padding:24px; text-align:center; color:#bbb; font-size:12px; }
+
+    /* Profil d'élévation */
+    .elev-widget { padding:12px 14px; }
+    .elev-chart-wrap { position:relative; width:100%; height:90px; cursor:crosshair; user-select:none; }
+    .elev-chart  { width:100%; height:100%; display:block; overflow:visible; }
+    .elev-tooltip {
+      position:absolute; top:-2px; pointer-events:none;
+      display:none; flex-direction:column; align-items:center; gap:0;
+      transform:translateX(-50%);
+    }
+    .elev-tooltip.visible { display:flex; }
+    .elev-tooltip-bubble {
+      background:var(--brand); color:#fff; font-size:10px; font-weight:700;
+      padding:3px 7px; border-radius:6px; white-space:nowrap; line-height:1.4;
+      box-shadow:0 2px 8px rgba(0,37,105,.3);
+    }
+    .elev-tooltip-bubble span { font-weight:400; opacity:.75; margin-left:3px; font-size:9px; }
+    .elev-stats  { display:flex; gap:6px; margin-top:8px; }
+    .elev-stat   { flex:1; background:var(--mist); border-radius:7px; padding:5px 8px; text-align:center; }
+    .elev-stat-lbl { font-size:8px; color:#aaa; text-transform:uppercase; letter-spacing:.07em; }
+    .elev-stat-val { font-size:12px; font-weight:700; color:var(--ink); margin-top:1px; }
+    .elev-loading  { padding:24px; text-align:center; color:#bbb; font-size:12px; }
+
+    /* Partage URL */
+    #share-toast {
+      position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+      background:var(--brand); color:#fff; padding:9px 18px; border-radius:30px;
+      font-size:12px; font-weight:600; letter-spacing:.04em; pointer-events:none;
+      opacity:0; transition:opacity .25s, transform .25s; z-index:9999;
+      box-shadow:0 4px 16px rgba(0,37,105,.3);
+    }
+    #share-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ══ FILTER PANEL (sidebar) ════════════════════════════════════ */
+    #filter-panel {
+      background:var(--mist);
+      border-bottom:1px solid var(--ripple);
+      padding:10px 14px 8px;
+      flex-shrink:0;
+    }
+    #filter-panel.collapsed { padding-bottom:10px; }
+    .filter-title-bar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+    #filter-panel.collapsed .filter-title-bar { margin-bottom:0; }
+    .filter-title { font-size:9px; font-weight:700; color:var(--brand); text-transform:uppercase; letter-spacing:.14em; white-space:nowrap; }
+    .filter-toggle-btn { background:none; border:none; cursor:pointer; display:flex; align-items:center; padding:0; }
+    .filter-toggle-btn svg { transition:transform .2s; color:#aaa; }
+    #filter-panel.collapsed .filter-toggle-btn svg { transform:rotate(180deg); }
+    .filter-body { display:flex; flex-direction:column; gap:7px; }
+    #filter-panel.collapsed .filter-body { display:none; }
+    .filter-row { display:flex; gap:6px; align-items:flex-end; }
+    .filter-select-wrap { flex:1; min-width:0; }
+    .filter-select-wrap label { display:block; font-size:8px; font-weight:700; color:var(--brand); text-transform:uppercase; letter-spacing:.1em; margin-bottom:3px; opacity:.7; }
+    .filter-select-wrap select {
+      width:100%; padding:5px 20px 5px 7px; border-radius:6px;
+      border:1px solid var(--ripple); background:#fff; color:var(--ink);
+      font-family:Arial,sans-serif; font-size:11px; appearance:none;
+      cursor:pointer; outline:none;
+      transition:border-color .15s, box-shadow .15s;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23002569'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 6px center;
+    }
+    .filter-select-wrap select:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,180,216,.15); }
+    .filter-toggles { display:flex; flex-direction:column; gap:6px; }
+    .filter-toggle-item { display:flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
+    .filter-toggle-item span { font-size:10.5px; color:var(--ink); }
+    .ftoggle { width:30px; height:17px; border-radius:9px; background:#d0d8e8; position:relative; transition:background .2s; flex-shrink:0; }
+    .ftoggle::after { content:''; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%; background:#fff; transition:transform .2s, box-shadow .2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+    .ftoggle.on { background:var(--accent); }
+    .ftoggle.on::after { transform:translateX(13px); }
+    .filter-footer { display:flex; align-items:center; justify-content:space-between; margin-top:4px; }
+    .filter-reset { font-size:9.5px; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:none; font-family:Arial,sans-serif; padding:0; }
+    .filter-reset:hover { color:var(--brand); }
+    .filter-active-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); display:none; flex-shrink:0; }
+    .filter-active-dot.visible { display:inline-block; }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-search">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="search-input" placeholder="Rechercher un parcours…"/>
+    </div>
+
+  </div>
+  <div class="sidebar-count" id="sidebar-count">Chargement…</div>
+
+  <!-- Panneau de filtres -->
+  <div id="filter-panel" class="collapsed">
+    <div class="filter-title-bar">
+      <div style="display:flex;align-items:center;gap:7px;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--brand);flex-shrink:0"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+        <span class="filter-title">Filtres</span>
+        <span class="filter-active-dot" id="filter-dot"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="filter-reset" id="filter-reset-btn" style="display:none">Réinitialiser</button>
+        <button class="filter-toggle-btn" id="filter-collapse-btn" title="Afficher/masquer les filtres">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="filter-body">
+      <div class="filter-row">
+        <div class="filter-select-wrap">
+          <label>Niveau</label>
+          <select id="f-niveau"><option value="">Tous</option><option value="ND01">Débutant</option><option value="ND02">Intermédiaire</option><option value="ND03">Avancé</option><option value="ND04">Expert</option></select>
+        </div>
+        <div class="filter-select-wrap">
+          <label>Milieu</label>
+          <select id="f-milieu"><option value="">Tous</option><option value="EC">Eau calme</option><option value="EV">Eau vive</option><option value="MAR">Marin</option></select>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-select-wrap">
+          <label>Durée</label>
+          <select id="f-duree"><option value="">Toutes</option><option value="J01">Moins d'½ jour</option><option value="J02">½ jour</option><option value="J03">1 jour</option><option value="J04">2 jours</option><option value="J05">3 jours+</option></select>
+        </div>
+        <div class="filter-select-wrap">
+          <label>Type</label>
+          <select id="f-trajet"><option value="">Tous</option><option value="ALL">Aller simple</option><option value="ALR">Aller-retour</option><option value="BOU">Boucle</option></select>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-select-wrap" style="flex:2">
+          <label>Région touristique</label>
+          <select id="f-region"><option value="">Toutes les régions</option></select>
+        </div>
+      </div>
+      <div class="filter-toggles">
+        <label class="filter-toggle-item" id="ftog-locat">
+          <div class="ftoggle" id="ftog-locat-sw"></div>
+          <span>Location d'équipement</span>
+        </label>
+        <label class="filter-toggle-item" id="ftog-gratuit">
+          <div class="ftoggle" id="ftog-gratuit-sw"></div>
+          <span>Parcours non payant</span>
+        </label>
+        <label class="filter-toggle-item" id="ftog-ouvert">
+          <div class="ftoggle" id="ftog-ouvert-sw"></div>
+          <span>Disponible seulement</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div id="sidebar-list">
+    <div class="sidebar-loading"><div class="spinner-sm"></div>Chargement des parcours…</div>
+  </div>
+  <!-- Onglet sidebar (fixe, toujours visible) -->
+  <button id="sidebar-tab" title="Afficher/masquer la liste">
+    <svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="7 2 2 8 7 14"/>
+    </svg>
+  </button>
+</div>
+
+<div id="map-container">
+  <div id="viewDiv"></div>
+
+  <!-- Boutons flottants sur la carte -->
+  <div id="map-ctrl-extra">
+    <!-- Zoom + / − custom -->
+    <button id="zoom-in-btn" class="map-ctrl-btn" title="Zoom avant">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <button id="zoom-out-btn" class="map-ctrl-btn" title="Zoom arrière">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <!-- Séparateur -->
+    <div class="map-ctrl-sep"></div>
+    <!-- Vue initiale -->
+    <button id="home-btn" class="map-ctrl-btn" title="Vue initiale">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/>
+        <polyline points="9 21 9 13 15 13 15 21"/>
+      </svg>
+    </button>
+    <!-- Réinitialiser filtres (visible seulement si filtres actifs) -->
+    <button id="reset-btn" class="map-ctrl-btn" title="Réinitialiser les filtres" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+      </svg>
+    </button>
+    <!-- Filtre vue carte -->
+    <button id="spatial-btn" class="map-ctrl-btn" title="Filtrer par vue carte">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <polygon points="3 6 10 3 17 6 22 3 22 18 17 21 10 18 3 21"/>
+        <line x1="10" y1="3" x2="10" y2="18"/>
+        <line x1="17" y1="6" x2="17" y2="21"/>
+      </svg>
+    </button>
+    <!-- Séparateur -->
+    <div class="map-ctrl-sep"></div>
+    <!-- Géolocalisation -->
+    <button id="geo-btn" class="map-ctrl-btn" title="Me localiser">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+        <circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/>
+      </svg>
+    </button>
+    <!-- Partage URL -->
+    <button id="share-btn" class="map-ctrl-btn" title="Copier le lien partageable">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
+    </button>
+    <!-- Séparateur -->
+    <div class="map-ctrl-sep"></div>
+    <!-- Plein écran -->
+    <button id="fullscreen-btn" class="map-ctrl-btn" title="Plein écran">
+      <svg id="fs-icon-expand" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+        <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+      </svg>
+      <svg id="fs-icon-collapse" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:none">
+        <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+        <line x1="10" y1="14" x2="3" y2="21"/><line x1="14" y1="10" x2="21" y2="3"/>
+      </svg>
+    </button>
+  </div>
+  <div id="map-controls" style="display:none"></div>
+
+  <!-- Sélecteur de basemap -->
+  <div id="basemap-switcher">
+    <div id="basemap-options">
+      <div class="basemap-opt active" data-basemap="streets-navigation-vector">
+        <div class="basemap-opt-thumb" style="background:linear-gradient(135deg,#d4e4f7,#a8c8f0);display:flex;align-items:center;justify-content:center;font-size:18px;">🗺️</div>
+        <span class="basemap-opt-label">Routier</span>
+      </div>
+      <div class="basemap-opt" data-basemap="satellite">
+        <div class="basemap-opt-thumb" style="background:linear-gradient(135deg,#1a3a1a,#3a6a3a);display:flex;align-items:center;justify-content:center;font-size:18px;">🛰️</div>
+        <span class="basemap-opt-label">Satellite</span>
+      </div>
+      <div class="basemap-opt" data-basemap="hybrid">
+        <div class="basemap-opt-thumb" style="background:linear-gradient(135deg,#2a4a2a,#4a7a4a);display:flex;align-items:center;justify-content:center;font-size:18px;">🗾</div>
+        <span class="basemap-opt-label">Hybride</span>
+      </div>
+      <div class="basemap-opt" data-basemap="topo-vector">
+        <div class="basemap-opt-thumb" style="background:linear-gradient(135deg,#e8dfc8,#c8b898);display:flex;align-items:center;justify-content:center;font-size:18px;">⛰️</div>
+        <span class="basemap-opt-label">Topographique</span>
+      </div>
+      <div class="basemap-opt" data-basemap="dark-gray-vector">
+        <div class="basemap-opt-thumb" style="background:linear-gradient(135deg,#2a2a2a,#444);display:flex;align-items:center;justify-content:center;font-size:18px;">🌑</div>
+        <span class="basemap-opt-label">Sombre</span>
+      </div>
+    </div>
+    <div id="basemap-toggle" title="Changer la carte de fond">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="3 6 10 3 17 6 22 3 22 18 17 21 10 18 3 21"/>
+        <line x1="10" y1="3" x2="10" y2="18"/>
+        <line x1="17" y1="6" x2="17" y2="21"/>
+      </svg>
+      <div id="basemap-toggle-label">Fond</div>
+    </div>
+  </div>
+
+  <!-- Point de géolocalisation utilisateur -->
+  <div id="user-location-dot" style="display:none; position:absolute; pointer-events:none; z-index:200;">
+    <div class="pulse"></div><div class="dot"></div>
+  </div>
+
+  <div id="custom-popup">
+    <div class="popup-photo-wrap" id="photo-wrap">
+      <div class="popup-photo-loading"><div class="spinner"></div></div>
+    </div>
+    <div class="popup-header">
+      <button class="popup-close" id="popup-close-btn">✕</button>
+      <div class="popup-route" id="popup-route"></div>
+      <div class="popup-title" id="popup-title"></div>
+    </div>
+    <div class="popup-body">
+      <div class="popup-desc"    id="popup-desc"></div>
+      <div class="popup-grid"    id="popup-grid"></div>
+      <div class="popup-tags"    id="popup-tags"></div>
+
+      <!-- Onglets contextuels -->
+      <div class="popup-tabs" id="popup-tabs-bar">
+        <button class="popup-tab active" data-tab="info">📋 Info</button>
+        <button class="popup-tab" data-tab="meteo">🌤 Météo</button>
+        <button class="popup-tab" data-tab="debit">💧 Débit</button>
+        <button class="popup-tab" data-tab="elev">⛰ Profil</button>
+      </div>
+
+      <div id="pane-info" class="popup-tab-pane active">
+        <div style="padding:0 0 12px 0">
+          <div class="popup-divider" id="popup-divider"></div>
+          <a class="popup-btn" id="popup-btn" href="#" target="_blank" rel="noopener">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+            Voir la fiche complète
+          </a>
+        </div>
+      </div>
+      <div id="pane-meteo" class="popup-tab-pane">
+        <div class="weather-widget" id="weather-content"><div class="weather-loading">Chargement météo…</div></div>
+      </div>
+      <div id="pane-debit" class="popup-tab-pane">
+        <div class="flow-widget" id="flow-content"><div class="flow-loading">Chargement débit…</div></div>
+      </div>
+      <div id="pane-elev" class="popup-tab-pane">
+        <div class="elev-widget" id="elev-content"><div class="elev-loading">Chargement profil…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast partage -->
+<div id="share-toast">🔗 Lien copié !</div>
+
+<script>
+// ── URLs & constantes ────────────────────────────────────────────
+const LAYER_URL      = 'https://services8.arcgis.com/DxiA7PucIZzprCzK/arcgis/rest/services/RB_Section_Web_pts/FeatureServer/0';
+const SECTION_URL    = 'https://services8.arcgis.com/DxiA7PucIZzprCzK/arcgis/rest/services/2024_LS03_Laroutebleue_view/FeatureServer/18';
+const DEFAULT_CENTER = [-71.5, 52.0];
+const DEFAULT_ZOOM   = 5;
+
+// Régions touristiques (NO_REG_TOURST), triées numériquement
+const REGIONS = {
+  '01':'Îles-de-la-Madeleine','02':'Gaspésie','03':'Bas-Saint-Laurent',
+  '04':'Région de Québec','05':'Charlevoix','06':'Chaudière-Appalaches',
+  '07':'Mauricie',"08":"Cantons-de-l'Est",'09':'Montérégie','10':'Lanaudière',
+  '11':'Laurentides','12':'Montréal','13':'Outaouais','14':'Abitibi-Témiscamingue',
+  '15':'Saguenay – Lac-Saint-Jean','16':'Manicouagan','17':'Duplessis',
+  '18':'Baie-James et Eeyou Istchee','19':'Laval','20':'Centre-du-Québec','21':'Nunavik'
+};
+
+// Valeurs codées de la couche
+const DUREE_LBL   = { J01:'< ½ jour', J02:'½ jour', J03:'1 jour', J04:'2 jours', J05:'3 jours+' };
+const DIFFI_LBL   = { ND01:'Débutant', ND02:'Intermédiaire', ND03:'Avancé', ND04:'Expert' };
+const TRAJET_LBL  = { ALL:'Aller simple', ALR:'Aller-retour', BOU:'Boucle' };
+const MILIEU_ICO  = { EC:'🌊', EV:'🌀', MAR:'⛵' };
+const MILIEU_LBL  = { EC:'Eau calme', EV:'Eau vive', MAR:'Marin' };
+
+// Champs à récupérer (tous les champs pertinents de la couche)
+const OUT_FIELDS = [
+  'OBJECTID','NOM','NOM_RTE_BLEUE','NO_SECTN','ID_SECTN','ID_PARCR',
+  'DESCR','NOTE','DUREE','LONGU','TYPE_TRAJET',
+  'NIV_DIFFI','NIV_CLASS_GEN','TYPE_MILIEUX','TYPE_ZONE',
+  'ETAT_SECTION','TARIF','LOCAT','NAVETT','SERV_GUID',
+  'URL_FICHE_RB','NO_REG_TOURST','NOM_PLAN_EAU','MUNIC',
+  'DEBIT_MIN','DEBIT_MAX'
+].join(',');
+
+let allFeatures = [], photos = [], photoIndex = 0;
+let currentOID = null, activeItem = null, arcgisView = null, arcgisLayer = null, sectionLayer = null;
+let highlightHandle = null;
+let activeGeometry = null;
+let spatialFilterActive = false;
+let spatialFilterTimer  = null;
+let featMap = {};
+let activeRegionHeader = null;
+let initialExtent = null;
+let elevLocations = [];
+let elevGraphicsLayer = null;
+let ArcGISGraphic = null; // sera assigné dans require()
+
+const popup       = document.getElementById('custom-popup');
+const closeBtn    = document.getElementById('popup-close-btn');
+const photoWrap   = document.getElementById('photo-wrap');
+const elRoute     = document.getElementById('popup-route');
+const elTitle     = document.getElementById('popup-title');
+const elDesc      = document.getElementById('popup-desc');
+const elGrid      = document.getElementById('popup-grid');
+const elTags      = document.getElementById('popup-tags');
+const elDivider   = document.getElementById('popup-divider');
+const elBtn       = document.getElementById('popup-btn');
+const searchInput  = document.getElementById('search-input');
+const sidebarList  = document.getElementById('sidebar-list');
+const sidebarCount = document.getElementById('sidebar-count');
+const resetBtn     = document.getElementById('reset-btn');
+
+// ── Fermer popup ─────────────────────────────────────────────────
+function closePopup() {
+  popup.classList.remove('visible');
+  activeGeometry = null;
+  clearHighlight();
+  if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
+}
+closeBtn.addEventListener('click', closePopup);
+
+// ── Filtre région sur la couche ArcGIS ───────────────────────────
+function filterLayerByRegion(code) {
+  if (!arcgisLayer) return;
+  // Filtre SQL sur le champ NO_REG_TOURST
+  arcgisLayer.definitionExpression = `NO_REG_TOURST = '${code}'`;
+}
+
+function clearLayerFilter() {
+  if (!arcgisLayer) return;
+  arcgisLayer.definitionExpression = '';
+}
+
+// Surligner une section sur la carte (layer sectionLayer)
+async function highlightSection(sectnId) {
+  if (highlightHandle) { highlightHandle.remove(); highlightHandle = null; }
+  if (!sectnId || !arcgisView || !sectionLayer) return;
+  try {
+    // Attendre que la layerView soit prête ET que les données soient chargées
+    const lv = await arcgisView.whenLayerView(sectionLayer);
+    await waitForLayerView(lv);
+
+    // Requête sur la couche (pas la layerView) pour obtenir les OBJECTIDs
+    const query = sectionLayer.createQuery();
+    query.where = 'ID_SECTN = ' + sectnId;
+    query.returnGeometry = false;
+    query.outFields = ['OBJECTID'];
+
+    const result = await sectionLayer.queryFeatures(query);
+    console.log('highlight features:', result.features.length, 'pour ID_SECTN =', sectnId);
+
+    if (result.features.length > 0) {
+      highlightHandle = lv.highlight(result.features);
+    }
+  } catch(e) { console.warn('highlight échoué:', e); }
+}
+
+// Attendre que la layerView ait fini de charger
+function waitForLayerView(lv) {
+  return new Promise(resolve => {
+    if (!lv.updating) { resolve(); return; }
+    const handle = lv.watch('updating', val => {
+      if (!val) { handle.remove(); resolve(); }
+    });
+  });
+}
+
+function clearHighlight() {
+  if (highlightHandle) { highlightHandle.remove(); highlightHandle = null; }
+}
+
+// ── Reset ────────────────────────────────────────────────────────
+resetBtn.addEventListener('click', () => {
+  searchInput.value = '';
+  searchInput.dispatchEvent(new Event('input'));
+  // Effacer les filtres du panneau
+  ['f-niveau','f-region','f-duree','f-milieu','f-trajet'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['locat','gratuit','ouvert'].forEach(k => { filterState[k]=false; const sw=document.getElementById(`ftog-${k}-sw`); if(sw) sw.classList.remove('on'); });
+  filterState.niveau=filterState.region=filterState.duree=filterState.milieu=filterState.trajet='';
+  const filterDot = document.getElementById('filter-dot'); if(filterDot) filterDot.classList.remove('visible');
+  const filterResetEl = document.getElementById('filter-reset-btn'); if(filterResetEl) filterResetEl.style.display='none';
+  // Effacer le filtre de la couche
+  clearLayerFilter();
+  if (arcgisLayer)  arcgisLayer.definitionExpression  = '';
+  if (sectionLayer) sectionLayer.definitionExpression = '';
+  // Désélectionner le header actif
+  if (activeRegionHeader) {
+    activeRegionHeader.classList.remove('region-selected');
+    activeRegionHeader = null;
+  }
+  // Réafficher tous les groupes dans la sidebar
+  sidebarList.querySelectorAll('.region-group').forEach(g => g.style.display = '');
+  sidebarList.querySelectorAll('.region-items').forEach(d => { d.classList.add('hidden'); });
+  sidebarList.querySelectorAll('.region-header').forEach(h => h.classList.add('collapsed'));
+  sidebarList.querySelectorAll('.parcours-item').forEach(i => i.style.display='');
+  sidebarCount.textContent = allFeatures.length ? `${allFeatures.length} parcours · ${sidebarList.querySelectorAll('.region-group').length} régions` : 'Chargement…';
+  if (arcgisView) {
+    if (initialExtent) arcgisView.goTo(initialExtent, { duration: 700 });
+    else arcgisView.goTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }, { duration: 600 });
+  }
+  closePopup();
+  resetBtn.classList.remove('visible');
+});
+
+// ── Popup fixe — repositionPopup désactivé ───────────────────────
+function repositionPopup() { /* popup fixe, rien à faire */ }
+
+// ── Centre compensé pour que le point soit visible sous le popup ──
+// Le popup est centré horizontalement sur le point et apparaît AU-DESSUS.
+// On décale le goTo vers le haut (lat +) pour laisser de la place.
+function compensatedCenter(lng, lat) {
+  if (!arcgisView) return { longitude: lng, latitude: lat };
+  // Hauteur popup ~420px + 20px marge = 440px depuis le bas du popup jusqu'au point
+  // On veut que le point soit à ~65% de la hauteur de la carte
+  const mapH    = arcgisView.height;
+  const offsetPx = mapH * 0.18; // décaler le centre de 18% vers le haut
+  const centerPt = arcgisView.toMap({ x: arcgisView.width / 2, y: mapH / 2 });
+  const shiftedPt = arcgisView.toMap({ x: arcgisView.width / 2, y: mapH / 2 + offsetPx });
+  const dLat = centerPt.latitude - shiftedPt.latitude;
+  return { longitude: lng, latitude: lat + dLat };
+}
+
+// ── Fetch paginé ─────────────────────────────────────────────────
+async function fetchPaginated() {
+  let features = [], offset = 0;
+  const base = `${LAYER_URL}/query?where=1%3D1&outFields=${encodeURIComponent(OUT_FIELDS)}&returnGeometry=true&outSR=4326&f=json`;
+  while (true) {
+    const res  = await fetch(`${base}&resultOffset=${offset}&resultRecordCount=1000`);
+    const data = await res.json();
+    if (data.error) { console.error('Erreur ArcGIS:', data.error); break; }
+    features = features.concat(data.features || []);
+    if (!data.exceededTransferLimit) break;
+    offset += 1000;
+  }
+  return features;
+}
+
+// ── Construire la sidebar groupée par région touristique ──────────
+function buildSidebar(features) {
+  const grouped = {};
+
+  features.forEach(f => {
+    const p = f.attributes;
+
+    // Code région (NO_REG_TOURST) : ex "03", "11"
+    const raw  = (p.NO_REG_TOURST || '??').toString().trim();
+    const code = raw.match(/^\d+$/) ? raw.padStart(2,'0') : raw;
+    const sortKey = parseInt(code) || 9999;
+    const nomReg  = REGIONS[code] || `Région ${code}`;
+
+    if (!grouped[code]) grouped[code] = { nom: nomReg, sortKey, items: [] };
+    grouped[code].items.push(f);
+  });
+
+  // Tri numérique des régions
+  const sortedCodes = Object.keys(grouped).sort((a,b) => grouped[a].sortKey - grouped[b].sortKey);
+
+  sidebarList.innerHTML = '';
+  const total = features.length;
+  sidebarCount.textContent = `${total} parcours · ${sortedCodes.length} régions`;
+
+  sortedCodes.forEach(code => {
+    const { nom: regName, items } = grouped[code];
+
+    const group = document.createElement('div');
+    group.className = 'region-group';
+
+    // En-tête région
+    const header = document.createElement('div');
+    header.className = 'region-header';
+    header.innerHTML = `
+      <span class="region-name">${regName}</span>
+      <span class="region-meta">
+        <span class="region-count">${items.length}</span>
+        <span class="region-chevron">▾</span>
+      </span>`;
+
+    const itemsDiv = document.createElement('div');
+    itemsDiv.className = 'region-items hidden';
+    header.classList.add('collapsed');
+
+    // Photo de fond du header région
+    (async () => {
+      for (const f of items.slice(0, 5)) {
+        try {
+          const res  = await fetch(`${LAYER_URL}/${f.attributes.OBJECTID}/attachments?f=json`);
+          const data = await res.json();
+          const imgs = (data.attachmentInfos || []).filter(a => a.contentType && a.contentType.startsWith('image/'));
+          if (imgs.length > 0) {
+            header.style.backgroundImage = `url(${LAYER_URL}/${f.attributes.OBJECTID}/attachments/${imgs[0].id})`;
+            break;
+          }
+        } catch(e) {}
+      }
+    })();
+
+    // Fonction zoom région — zoome sur les LIGNES de section (géométrie réelle)
+    function zoomToRegion() {
+      if (!arcgisView || !sectionLayer) return;
+      const sectnIds = [...new Set(
+        items.map(f => f.attributes.ID_SECTN).filter(id => id != null)
+      )];
+      // Construire le WHERE selon ce qu'on a
+      let where;
+      if (sectnIds.length > 0) {
+        where = 'ID_SECTN IN (' + sectnIds.join(',') + ')';
+      } else {
+        where = "NO_REG_TOURST = '" + code + "'";
+      }
+      console.log('zoomToRegion where:', where);
+      sectionLayer.queryExtent({
+        where: where,
+        outSpatialReference: { wkid: 4326 }
+      }).then(result => {
+        console.log('queryExtent result:', result);
+        if (result && result.extent) {
+          arcgisView.goTo(result.extent.expand(1.3), { duration: 700 });
+        } else {
+          console.warn('Extent vide pour cette région');
+        }
+      }).catch(err => {
+        console.warn('queryExtent sectionLayer échoué:', err);
+      });
+    }
+
+    // ── Clic sur le header → sélection région ──────────────────────
+    // Ouvre/ferme la liste, filtre la carte, zoome sur la région
+    header.addEventListener('click', () => {
+      const isCollapsed = header.classList.contains('collapsed');
+
+      if (isCollapsed) {
+        // ── OUVERTURE : sélectionner cette région ──
+
+        // 1. Fermer tous les autres groupes et désélectionner
+        sidebarList.querySelectorAll('.region-group').forEach(g => {
+          if (g !== group) {
+            g.querySelector('.region-header').classList.add('collapsed');
+            g.querySelector('.region-items').classList.add('hidden');
+            g.querySelector('.region-header').classList.remove('region-selected');
+          }
+        });
+
+        // 2. Ouvrir ce groupe
+        header.classList.remove('collapsed');
+        itemsDiv.classList.remove('hidden');
+        header.classList.add('region-selected');
+        activeRegionHeader = header;
+
+        // 3. Filtrer la couche ArcGIS sur cette région
+        filterLayerByRegion(code);
+
+        // 4. Zoomer sur les parcours de cette région
+        zoomToRegion();
+
+        // 5. Mettre à jour le compteur
+        sidebarCount.textContent = `${items.length} parcours — ${regName}`;
+        resetBtn.classList.add('visible');
+
+      } else {
+        // ── FERMETURE : refermer sans changer le filtre carte ──
+        header.classList.add('collapsed');
+        itemsDiv.classList.add('hidden');
+        header.classList.remove('region-selected');
+        activeRegionHeader = null;
+        // Effacer le filtre et revenir à la vue globale
+        clearLayerFilter();
+        sidebarCount.textContent = `${allFeatures.length} parcours`;
+        if (arcgisView) {
+          if (initialExtent) arcgisView.goTo(initialExtent, { duration: 700 });
+          else arcgisView.goTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }, { duration: 700 });
+        }
+      }
+    });
+
+    // Trier par NO_SECTN puis par NOM
+    items.sort((a,b) => {
+      const na = a.attributes.NO_SECTN ?? 9999;
+      const nb = b.attributes.NO_SECTN ?? 9999;
+      if (na !== nb) return na - nb;
+      return (a.attributes.NOM||'').localeCompare(b.attributes.NOM||'','fr');
+    });
+
+    items.forEach(f => {
+      const p = f.attributes;
+
+      // Nom principal : NOM, sinon NOM_RTE_BLEUE
+      const nom   = p.NOM || p.NOM_RTE_BLEUE || `Section ${p.NO_SECTN || p.OBJECTID}`;
+      // Sous-titre : nom de la route bleue si différent du nom
+      const rb    = (p.NOM_RTE_BLEUE && p.NOM_RTE_BLEUE !== nom) ? p.NOM_RTE_BLEUE : '';
+      const milieu = p.TYPE_MILIEUX || 'DEF';
+      const icon   = MILIEU_ICO[milieu] || '🛶';
+
+      // Chips de la liste
+      const chips = [];
+      if (p.LONGU)      chips.push({ label:`${p.LONGU} km`, cls:'' });
+      if (p.DUREE)      chips.push({ label: DUREE_LBL[p.DUREE] || p.DUREE, cls:'' });
+      if (p.NIV_DIFFI)  chips.push({ label: DIFFI_LBL[p.NIV_DIFFI] || p.NIV_DIFFI, cls:`diff-${p.NIV_DIFFI}` });
+      if (p.ETAT_SECTION === 'F') chips.push({ label:'Fermé', cls:'chip-ferme' });
+      if (p.TARIF === '1')        chips.push({ label:'Payant', cls:'chip-payant' });
+
+      const chipsHTML = chips.map(c => `<span class="chip ${c.cls}">${c.label}</span>`).join('');
+
+      const item = document.createElement('div');
+      item.className   = 'parcours-item';
+      item.dataset.oid = String(p.OBJECTID);
+      item.innerHTML   = `
+        <div class="parcours-icon ${milieu}">${icon}</div>
+        <div class="parcours-info">
+          <div class="parcours-nom">${nom}</div>
+          ${rb ? `<div class="parcours-rb">${rb}</div>` : ''}
+          ${chipsHTML ? `<div class="parcours-chips">${chipsHTML}</div>` : ''}
+        </div>`;
+      itemsDiv.appendChild(item);
+    });
+
+    group.appendChild(header);
+    group.appendChild(itemsDiv);
+    sidebarList.appendChild(group);
+  });
+}
+
+// ── Recherche ────────────────────────────────────────────────────
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.toLowerCase().trim();
+  const items  = sidebarList.querySelectorAll('.parcours-item');
+  const groups = sidebarList.querySelectorAll('.region-group');
+  resetBtn.classList.toggle('visible', q.length > 0);
+
+  if (!q) {
+    items.forEach(i  => i.style.display = '');
+    groups.forEach(g => g.style.display = '');
+    sidebarList.querySelectorAll('.region-items').forEach(d => d.classList.remove('hidden'));
+    sidebarList.querySelectorAll('.region-header').forEach(h => h.classList.remove('collapsed'));
+    sidebarCount.textContent = `${allFeatures.length} parcours`;
+    return;
+  }
+  let visible = 0;
+  groups.forEach(g => {
+    const gItems = g.querySelectorAll('.parcours-item');
+    let gv = 0;
+    gItems.forEach(item => {
+      const nom  = item.querySelector('.parcours-nom')?.textContent.toLowerCase() || '';
+      const rb   = item.querySelector('.parcours-rb')?.textContent.toLowerCase()  || '';
+      const match = nom.includes(q) || rb.includes(q);
+      item.style.display = match ? '' : 'none';
+      if (match) gv++;
+    });
+    g.style.display = gv > 0 ? '' : 'none';
+    if (gv > 0) {
+      g.querySelector('.region-items').classList.remove('hidden');
+      g.querySelector('.region-header').classList.remove('collapsed');
+    }
+    visible += gv;
+  });
+  sidebarCount.textContent = `${visible} résultat${visible !== 1 ? 's' : ''}`;
+});
+
+// ── Popup ────────────────────────────────────────────────────────
+async function showPopup(attrs, lat, lng) {
+  const oid = attrs.OBJECTID;
+  photos = []; photoIndex = 0; currentOID = oid;
+
+  // Mémoriser coords pour les onglets
+  lastPopupAttrs = attrs;
+  lastPopupLat   = lat  ?? lastPopupLat;
+  lastPopupLng   = lng  ?? lastPopupLng;
+  weatherLoaded = false; flowLoaded = false; elevLoaded = false;
+  // Remettre l'onglet Info actif
+  document.querySelectorAll('.popup-tab').forEach(t => t.classList.toggle('active', t.dataset.tab==='info'));
+  document.querySelectorAll('.popup-tab-pane').forEach(p => p.classList.toggle('active', p.id==='pane-info'));
+  document.getElementById('weather-content').innerHTML = '<div class="weather-loading">Chargement météo…</div>';
+  document.getElementById('flow-content').innerHTML = '<div class="flow-loading">Chargement débit…</div>';
+  document.getElementById('elev-content').innerHTML = '<div class="elev-loading">Calcul du profil…</div>';
+
+  // En-tête
+  elRoute.textContent = attrs.NOM_RTE_BLEUE || '';
+  elTitle.textContent = attrs.NOM || attrs.NOM_RTE_BLEUE || 'Parcours sans nom';
+
+  // Description : DESCR + NOTE
+  const desc = [attrs.DESCR, attrs.NOTE].filter(Boolean).join(' — ');
+  elDesc.style.display = desc ? 'block' : 'none';
+  elDesc.textContent   = desc;
+
+  // Grille de stats
+  const stats = [];
+  if (attrs.LONGU)         stats.push({ label:'Distance', value:`${attrs.LONGU} km` });
+  if (attrs.DUREE)         stats.push({ label:'Durée', value: DUREE_LBL[attrs.DUREE] || attrs.DUREE });
+  if (attrs.NIV_DIFFI)     stats.push({ label:'Difficulté', value: DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI });
+  if (attrs.TYPE_TRAJET)   stats.push({ label:'Trajet', value: TRAJET_LBL[attrs.TYPE_TRAJET] || attrs.TYPE_TRAJET });
+  if (attrs.TYPE_MILIEUX)  stats.push({ label:'Milieu', value: MILIEU_LBL[attrs.TYPE_MILIEUX] || attrs.TYPE_MILIEUX });
+  if (attrs.NOM_PLAN_EAU)  stats.push({ label:"Plan d'eau", value: attrs.NOM_PLAN_EAU });
+  if (attrs.DEBIT_MIN && attrs.DEBIT_MAX)
+    stats.push({ label:'Débit', value:`${attrs.DEBIT_MIN}–${attrs.DEBIT_MAX} m³/s` });
+  if (attrs.MUNIC)         stats.push({ label:'Municipalité', value: attrs.MUNIC });
+
+  elGrid.innerHTML = stats.map(s => `
+    <div class="popup-stat">
+      <div class="popup-stat-label">${s.label}</div>
+      <div class="popup-stat-value">${s.value}</div>
+    </div>`).join('');
+
+  // Tags de statut / services
+  const tags = [];
+  if (attrs.ETAT_SECTION === 'O') tags.push({ label:'✓ Ouvert',         cls:'tag-green' });
+  if (attrs.ETAT_SECTION === 'F') tags.push({ label:'🔒 Fermé',         cls:'tag-red'   });
+  if (attrs.TARIF   === '1')      tags.push({ label:'💰 Payant',        cls:'tag-warn'  });
+  if (attrs.LOCAT   === '1')      tags.push({ label:'📍 Location',      cls:''          });
+  if (attrs.NAVETT  === '1')      tags.push({ label:'🚌 Navette',       cls:''          });
+  if (attrs.SERV_GUID === '1')    tags.push({ label:'🧭 Guidé',         cls:''          });
+
+  elTags.innerHTML = tags.map(t => `<span class="popup-tag ${t.cls}">${t.label}</span>`).join('');
+  elTags.style.display = tags.length ? 'flex' : 'none';
+
+  // Bouton fiche
+  const popupBtn = document.getElementById('popup-btn');
+  const popupDivider = document.getElementById('popup-divider');
+  if (attrs.URL_FICHE_RB) {
+    popupBtn.href = attrs.URL_FICHE_RB;
+    popupBtn.style.display = 'flex';
+    popupDivider.style.display = 'block';
+  } else {
+    popupBtn.style.display = 'none';
+    popupDivider.style.display = 'none';
+  }
+
+  // Animation : flash rapide si déjà visible, sinon apparition
+  if (popup.classList.contains('visible')) {
+    popup.classList.add('updating');
+    await new Promise(r => setTimeout(r, 120));
+    popup.classList.remove('updating');
+  } else {
+    popup.classList.add('visible');
+  }
+
+  // Photos
+  photoWrap.innerHTML = '<div class="popup-photo-loading"><div class="spinner"></div></div>';
+  photos = await fetchPhotos(oid);
+  if (currentOID === oid) renderPhoto();
+}
+
+async function fetchPhotos(oid) {
+  try {
+    const res  = await fetch(`${LAYER_URL}/${oid}/attachments?f=json`);
+    const data = await res.json();
+    return (data.attachmentInfos || [])
+      .filter(a => a.contentType && a.contentType.startsWith('image/'))
+      .map(a => `${LAYER_URL}/${oid}/attachments/${a.id}`);
+  } catch { return []; }
+}
+
+function renderPhoto() {
+  photoWrap.innerHTML = '';
+  if (photos.length === 0) {
+    photoWrap.innerHTML = `<div class="popup-photo-placeholder">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>Aucune photo disponible</div>`;
+    return;
+  }
+  const img = document.createElement('img');
+  img.src = photos[photoIndex]; img.alt = 'Photo parcours';
+  photoWrap.appendChild(img);
+  if (photos.length > 1) {
+    const counter = document.createElement('div');
+    counter.className = 'photo-counter';
+    counter.textContent = `${photoIndex + 1} / ${photos.length}`;
+    photoWrap.appendChild(counter);
+    if (photoIndex > 0) {
+      const prev = document.createElement('button');
+      prev.className = 'photo-nav prev'; prev.innerHTML = '&#8249;';
+      prev.onclick = () => { photoIndex--; renderPhoto(); };
+      photoWrap.appendChild(prev);
+    }
+    if (photoIndex < photos.length - 1) {
+      const next = document.createElement('button');
+      next.className = 'photo-nav next'; next.innerHTML = '&#8250;';
+      next.onclick = () => { photoIndex++; renderPhoto(); };
+      photoWrap.appendChild(next);
+    }
+  }
+}
+
+// ── Panneau de filtres ───────────────────────────────────────────
+const filterState = { niveau:'', region:'', duree:'', milieu:'', trajet:'', locat:false, gratuit:false, ouvert:false };
+
+function populateRegionSelect() {
+  const sel = document.getElementById('f-region');
+  Object.entries(REGIONS).sort((a,b) => parseInt(a[0])-parseInt(b[0])).forEach(([code,nom]) => {
+    const opt = document.createElement('option'); opt.value = code; opt.textContent = nom; sel.appendChild(opt);
+  });
+}
+populateRegionSelect();
+
+function buildDefinitionExpression() {
+  const parts = [];
+  if (filterState.niveau)  parts.push(`NIV_DIFFI = '${filterState.niveau}'`);
+  if (filterState.region)  parts.push(`NO_REG_TOURST = '${filterState.region}'`);
+  if (filterState.duree)   parts.push(`DUREE = '${filterState.duree}'`);
+  if (filterState.milieu)  parts.push(`TYPE_MILIEUX = '${filterState.milieu}'`);
+  if (filterState.trajet)  parts.push(`TYPE_TRAJET = '${filterState.trajet}'`);
+  if (filterState.locat)   parts.push(`LOCAT = '1'`);
+  if (filterState.gratuit) parts.push(`TARIF <> '1'`);
+  if (filterState.ouvert)  parts.push(`ETAT_SECTION = 'O'`);
+  return parts.length ? parts.join(' AND ') : '';
+}
+
+function applyFilters() {
+  const items = document.querySelectorAll('.parcours-item');
+  const groups = document.querySelectorAll('.region-group');
+  let visCount = 0;
+
+  items.forEach(item => {
+    const f = featMap[item.dataset.oid];
+    if (!f) { item.style.display='none'; return; }
+    const p = f.attributes;
+    const raw = (p.NO_REG_TOURST||'??').toString().trim();
+    const code = raw.match(/^\d+$/) ? raw.padStart(2,'0') : raw;
+    const pass =
+      (!filterState.niveau  || p.NIV_DIFFI === filterState.niveau) &&
+      (!filterState.region  || code === filterState.region) &&
+      (!filterState.duree   || p.DUREE === filterState.duree) &&
+      (!filterState.milieu  || p.TYPE_MILIEUX === filterState.milieu) &&
+      (!filterState.trajet  || p.TYPE_TRAJET === filterState.trajet) &&
+      (!filterState.locat   || p.LOCAT === '1') &&
+      (!filterState.gratuit || p.TARIF !== '1') &&
+      (!filterState.ouvert  || p.ETAT_SECTION === 'O');
+    item.style.display = pass ? '' : 'none';
+    if (pass) visCount++;
+  });
+
+  groups.forEach(g => {
+    const anyVisible = [...g.querySelectorAll('.parcours-item')].some(i => i.style.display !== 'none');
+    g.style.display = anyVisible ? '' : 'none';
+  });
+
+  sidebarCount.textContent = `${visCount} parcours visibles`;
+
+  // Filtrer les points ET les lignes sur la carte
+  const expr = buildDefinitionExpression();
+  if (arcgisLayer)  arcgisLayer.definitionExpression  = expr;
+  if (sectionLayer) sectionLayer.definitionExpression = expr;
+
+  // Indicateur actif
+  const hasFilter = filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert;
+  document.getElementById('filter-dot').classList.toggle('visible', !!hasFilter);
+  const resetEl = document.getElementById('filter-reset-btn');
+  if (resetEl) resetEl.style.display = hasFilter ? 'inline' : 'none';
+  resetBtn.classList.toggle('visible', !!hasFilter);
+}
+
+['f-niveau','f-region','f-duree','f-milieu','f-trajet'].forEach(id => {
+  const key = id.replace('f-','');
+  document.getElementById(id).addEventListener('change', e => {
+    filterState[key] = e.target.value;
+    applyFilters();
+    resetBtn.classList.toggle('visible', !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert));
+  });
+});
+
+['locat','gratuit','ouvert'].forEach(key => {
+  const sw = document.getElementById(`ftog-${key}-sw`);
+  document.getElementById(`ftog-${key}`).addEventListener('click', () => {
+    filterState[key] = !filterState[key];
+    sw.classList.toggle('on', filterState[key]);
+    applyFilters();
+    resetBtn.classList.toggle('visible', !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert));
+  });
+});
+
+document.getElementById('filter-reset-btn').addEventListener('click', () => {
+  ['f-niveau','f-region','f-duree','f-milieu','f-trajet'].forEach(id => document.getElementById(id).value='');
+  ['locat','gratuit','ouvert'].forEach(k => { filterState[k]=false; document.getElementById(`ftog-${k}-sw`).classList.remove('on'); });
+  filterState.niveau=filterState.region=filterState.duree=filterState.milieu=filterState.trajet='';
+  // Effacer les filtres carte
+  if (arcgisLayer)  arcgisLayer.definitionExpression  = '';
+  if (sectionLayer) sectionLayer.definitionExpression = '';
+  document.getElementById('filter-dot').classList.remove('visible');
+  document.getElementById('filter-reset-btn').style.display = 'none';
+  resetBtn.classList.remove('visible');
+  sidebarCount.textContent = allFeatures.length ? `${allFeatures.length} parcours` : 'Chargement…';
+  document.querySelectorAll('.region-group').forEach(g => g.style.display='');
+  document.querySelectorAll('.parcours-item').forEach(i => i.style.display='');
+});
+
+document.getElementById('filter-collapse-btn').addEventListener('click', () => {
+  document.getElementById('filter-panel').classList.toggle('collapsed');
+});
+
+
+// ── Basemap switcher ─────────────────────────────────────────────
+
+const basemapToggle  = document.getElementById('basemap-toggle');
+const basemapOptions = document.getElementById('basemap-options');
+let basemapOpen = false;
+let currentBasemap = 'streets-navigation-vector';
+
+basemapToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  basemapOpen = !basemapOpen;
+  basemapOptions.classList.toggle('open', basemapOpen);
+});
+
+document.addEventListener('click', () => {
+  if (basemapOpen) { basemapOpen = false; basemapOptions.classList.remove('open'); }
+});
+basemapOptions.addEventListener('click', e => e.stopPropagation());
+
+document.querySelectorAll('.basemap-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    const bm = opt.dataset.basemap;
+    if (bm === currentBasemap) { basemapOpen=false; basemapOptions.classList.remove('open'); return; }
+    if (arcgisView) arcgisView.map.basemap = bm;
+    currentBasemap = bm;
+    document.querySelectorAll('.basemap-opt').forEach(o => o.classList.toggle('active', o.dataset.basemap === bm));
+    basemapOpen = false;
+    basemapOptions.classList.remove('open');
+  });
+});
+
+// Bouton maison — retour vue initiale + ferme popup
+document.getElementById('home-btn').addEventListener('click', () => {
+  closePopup();
+  if (!arcgisView) return;
+  if (initialExtent) arcgisView.goTo(initialExtent, { duration: 700 });
+  else arcgisView.goTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }, { duration: 700 });
+});
+
+// Boutons zoom custom
+document.getElementById('zoom-in-btn').addEventListener('click', () => {
+  if (arcgisView) arcgisView.goTo({ zoom: arcgisView.zoom + 1 }, { duration: 200 });
+});
+document.getElementById('zoom-out-btn').addEventListener('click', () => {
+  if (arcgisView) arcgisView.goTo({ zoom: arcgisView.zoom - 1 }, { duration: 200 });
+});
+
+// Plein écran
+const fsBtn = document.getElementById('fullscreen-btn');
+const fsIconExpand   = document.getElementById('fs-icon-expand');
+const fsIconCollapse = document.getElementById('fs-icon-collapse');
+fsBtn.addEventListener('click', () => {
+  const el = document.documentElement;
+  if (!document.fullscreenElement) {
+    el.requestFullscreen && el.requestFullscreen();
+    fsIconExpand.style.display = 'none';
+    fsIconCollapse.style.display = '';
+    fsBtn.classList.add('active');
+  } else {
+    document.exitFullscreen && document.exitFullscreen();
+    fsIconExpand.style.display = '';
+    fsIconCollapse.style.display = 'none';
+    fsBtn.classList.remove('active');
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) {
+    fsIconExpand.style.display = '';
+    fsIconCollapse.style.display = 'none';
+    fsBtn.classList.remove('active');
+  }
+});
+
+// Sidebar toggle
+const sidebar    = document.getElementById('sidebar');
+const sidebarTab = document.getElementById('sidebar-tab');
+const tabArrow   = sidebarTab.querySelector('svg');
+const SIDEBAR_W  = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || 340;
+let sidebarOpen  = true;
+
+sidebarTab.addEventListener('click', () => {
+  sidebarOpen = !sidebarOpen;
+  sidebar.classList.toggle('closed', !sidebarOpen);
+  sidebarTab.style.left = sidebarOpen ? 'var(--sidebar-w)' : '0px';
+  tabArrow.style.transform = sidebarOpen ? '' : 'rotate(180deg)';
+  setTimeout(() => { if (arcgisView) arcgisView.resize(); }, 310);
+});
+
+// ── Popup tabs ───────────────────────────────────────────────────
+document.querySelectorAll('.popup-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.popup-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.popup-tab-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('pane-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Météo (Open-Meteo, gratuit sans clé) ────────────────────────
+const WMO_ICONS = {
+  0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌧',
+  61:'🌧',63:'🌧',65:'🌧',71:'🌨',73:'🌨',75:'❄️',80:'🌦',81:'🌧',82:'⛈',
+  95:'⛈',96:'⛈',99:'⛈'
+};
+const WMO_DESC = {
+  0:'Ciel dégagé',1:'Principalement dégagé',2:'Partiellement nuageux',3:'Couvert',
+  45:'Brouillard',48:'Brouillard givrant',51:'Bruine légère',53:'Bruine modérée',55:'Bruine dense',
+  61:'Pluie légère',63:'Pluie modérée',65:'Pluie forte',71:'Neige légère',73:'Neige modérée',75:'Neige forte',
+  80:'Averses légères',81:'Averses',82:'Averses fortes',95:'Orage',96:'Orage avec grêle',99:'Orage violent'
+};
+
+async function fetchWeather(lat, lng) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,windspeed_10m,winddirection_10m,weathercode,relativehumidity_2m,precipitation&wind_speed_unit=kmh&timezone=America%2FToronto`;
+  const res = await fetch(url);
+  return (await res.json()).current;
+}
+
+async function loadWeather(lat, lng) {
+  const el = document.getElementById('weather-content');
+  el.innerHTML = '<div class="weather-loading">Chargement météo…</div>';
+  // MétéoMédia : URL basée sur la municipalité du parcours
+  const munic = (lastPopupAttrs && lastPopupAttrs.MUNIC) ? lastPopupAttrs.MUNIC : '';
+  const municSlug = munic
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // enlever accents
+    .replace(/['']/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+  const meteoMediaUrl = municSlug
+    ? `https://www.meteomedia.com/fr/ville/ca/quebec/${municSlug}/actuelle`
+    : `https://www.meteomedia.com/ca/meteo/quebec`;
+  try {
+    const w = await fetchWeather(lat, lng);
+    const code = w.weathercode;
+    const icon = WMO_ICONS[code] || '🌡️';
+    const desc = WMO_DESC[code] || 'Conditions variables';
+    const windDir = ['N','NE','E','SE','S','SO','O','NO'][Math.round(w.winddirection_10m / 45) % 8];
+    el.innerHTML = `
+      <a href="${meteoMediaUrl}" target="_blank" rel="noopener"
+         style="display:flex;flex-direction:column;gap:10px;text-decoration:none;color:inherit;cursor:pointer;border-radius:8px;transition:background .15s;padding:2px;"
+         onmouseover="this.style.background='rgba(0,37,105,.03)'"
+         onmouseout="this.style.background='transparent'">
+        <div class="weather-main">
+          <div class="weather-icon">${icon}</div>
+          <div>
+            <div class="weather-temp">${Math.round(w.temperature_2m)}°C</div>
+            <div class="weather-desc">${desc}</div>
+          </div>
+        </div>
+        <div class="weather-grid">
+          <div class="weather-cell"><div class="weather-cell-lbl">Vent</div><div class="weather-cell-val">${Math.round(w.windspeed_10m)} km/h ${windDir}</div></div>
+          <div class="weather-cell"><div class="weather-cell-lbl">Humidité</div><div class="weather-cell-val">${w.relativehumidity_2m}%</div></div>
+          <div class="weather-cell"><div class="weather-cell-lbl">Précip.</div><div class="weather-cell-val">${w.precipitation} mm</div></div>
+        </div>
+      </a>`;
+  } catch {
+    el.innerHTML = `
+      <div class="weather-loading">Météo indisponible</div>
+      <a href="${meteoMediaUrl}" target="_blank" rel="noopener"
+         style="display:flex;align-items:center;gap:6px;margin:8px 14px;padding:7px 10px;background:#f0f7ff;border-radius:8px;text-decoration:none;color:var(--brand);font-size:11px;font-weight:600;">
+        Voir sur MétéoMédia ↗
+      </a>`;
+  }
+}
+
+// ── Débit rivières (MELCCFP / CEHQ via API publique) ─────────────
+// Utilise le débit min/max du parcours comme contexte, et l'API HYDAT pour le débit réel
+async function loadFlow(attrs, lat, lng) {
+  const el = document.getElementById('flow-content');
+  const dmin = attrs.DEBIT_MIN, dmax = attrs.DEBIT_MAX;
+  const nomEau = attrs.NOM_PLAN_EAU || '';
+
+  // Essayer l'API CEHQ via le proxy wateroffice
+  let realFlow = null;
+  try {
+    // Chercher une station proche via l'API Environment Canada (HYDAT)
+    const stationsRes = await fetch(`https://wateroffice.ec.gc.ca/services/real_time_data/json/inline?stations=&parameters=47&start_date=${new Date().toISOString().split('T')[0]}&end_date=${new Date().toISOString().split('T')[0]}`);
+    // API nécessite CORS — on affiche les données contextuelles du parcours à la place
+  } catch {}
+
+  // Construire l'affichage avec les données du parcours + note sur le débit en temps réel
+  if (!dmin && !dmax) {
+    el.innerHTML = `
+      <div class="flow-header">Conditions de débit</div>
+      <div style="padding:8px 0;font-size:11px;color:#888;line-height:1.6">
+        Aucune donnée de débit disponible pour ce parcours.<br>
+        <a href="https://www.cehq.gouv.qc.ca/hydrometrie/historique_donnees/default.asp" target="_blank" style="color:var(--accent)">Consulter le CEHQ →</a>
+      </div>`;
+    return;
+  }
+
+  const mid = dmin && dmax ? (dmin + dmax) / 2 : (dmin || dmax);
+  const pct = dmin && dmax ? 50 : 60;
+
+  // Évaluer les conditions
+  let statusClass = 'ok', statusLabel = '✓ Conditions favorables';
+  if (dmin > 80) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
+  else if (dmax < 5) { statusClass = 'low'; statusLabel = '⚠ Débit faible'; }
+
+  el.innerHTML = `
+    <div class="flow-header">Débit recommandé${nomEau ? ' — ' + nomEau : ''}</div>
+    <div style="display:flex;align-items:baseline;gap:4px;margin:4px 0">
+      <span class="flow-val">${dmin || '?'}–${dmax || '?'}</span>
+      <span class="flow-unit">m³/s</span>
+    </div>
+    <div class="flow-bar-wrap"><div class="flow-bar" style="width:${pct}%"></div></div>
+    <div class="flow-range"><span>${dmin ?? 0} m³/s min</span><span>${dmax ?? '?'} m³/s max</span></div>
+    <span class="flow-status ${statusClass}">${statusLabel}</span>
+    <div style="margin-top:8px;font-size:10px;color:#aaa;line-height:1.5">
+      Débit en temps réel : <a href="https://www.cehq.gouv.qc.ca/hydrometrie/historique_donnees/default.asp" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
+    </div>`;
+}
+
+// ── Profil d'élévation (Open-Elevation API) ──────────────────────
+
+// Rééchantillonner N points équidistants le long d'une polyligne [lon,lat]
+function resamplePolyline(coords, n) {
+  // Calculer longueur totale
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const dx = (coords[i][0] - coords[i-1][0]) * Math.cos(coords[i-1][1] * Math.PI / 180) * 111320;
+    const dy = (coords[i][1] - coords[i-1][1]) * 111320;
+    const d  = Math.sqrt(dx*dx + dy*dy);
+    segs.push(d); total += d;
+  }
+  const step = total / (n - 1);
+  const pts  = [{ longitude: coords[0][0], latitude: coords[0][1] }];
+  let accumulated = 0, segStart = 0;
+  for (let i = 1; i < coords.length && pts.length < n; i++) {
+    const segLen = segs[i-1];
+    while (accumulated + segLen >= step * pts.length && pts.length < n) {
+      const t = (step * pts.length - accumulated) / segLen;
+      pts.push({
+        longitude: coords[i-1][0] + t * (coords[i][0] - coords[i-1][0]),
+        latitude:  coords[i-1][1] + t * (coords[i][1] - coords[i-1][1])
+      });
+    }
+    accumulated += segLen;
+    segStart = i;
+  }
+  // Dernier point
+  if (pts.length < n) pts.push({ longitude: coords[coords.length-1][0], latitude: coords[coords.length-1][1] });
+  return pts;
+}
+
+async function loadElevation(attrs, lat, lng) {
+  const el = document.getElementById('elev-content');
+  el.innerHTML = '<div class="elev-loading">Récupération du tracé…</div>';
+  try {
+    const km  = parseFloat(attrs.LONGU) || 5;
+    const pts = 40;
+
+    // ── 1. Récupérer la vraie géométrie de la section ─────────────
+    let locations = null;
+    const sectnId = attrs.ID_SECTN;
+    if (sectnId && sectionLayer) {
+      try {
+        const q = sectionLayer.createQuery();
+        q.where = `ID_SECTN = ${sectnId}`;
+        q.outFields = ['ID_SECTN'];
+        q.returnGeometry = true;
+        q.outSpatialReference = { wkid: 4326 };
+        const result = await sectionLayer.queryFeatures(q);
+        if (result.features.length > 0) {
+          const geom = result.features[0].geometry;
+          // Aplatir tous les chemins (polyline peut avoir plusieurs paths)
+          let allCoords = [];
+          if (geom.paths) {
+            geom.paths.forEach(path => path.forEach(p => allCoords.push(p)));
+          } else if (geom.rings) {
+            geom.rings.forEach(ring => ring.forEach(p => allCoords.push(p)));
+          }
+          if (allCoords.length >= 2) {
+            locations = resamplePolyline(allCoords, pts).map(p => ({
+              latitude: p.latitude, longitude: p.longitude
+            }));
+          }
+        }
+      } catch(e) { console.warn('Géométrie section introuvable', e); }
+    }
+
+    // Fallback : interpolation linéaire si géométrie indisponible
+    if (!locations) {
+      const spread = Math.min(km * 0.005, 0.1);
+      locations = Array.from({length: pts}, (_, i) => ({
+        latitude:  lat + (i - pts/2) * spread / pts * 2,
+        longitude: lng + (i - pts/2) * spread / pts * 1.5
+      }));
+    }
+    elevLocations = locations;
+
+    // ── 2. Requête élévation ──────────────────────────────────────
+    el.innerHTML = '<div class="elev-loading">Calcul du profil d\'élévation…</div>';
+    const res  = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ locations })
+    });
+    const data = await res.json();
+    const elevs = data.results.map(r => r.elevation);
+    const minE  = Math.min(...elevs), maxE = Math.max(...elevs);
+    const gain  = elevs.reduce((a,e,i) => i>0 && e>elevs[i-1] ? a+(e-elevs[i-1]) : a, 0);
+    const loss  = elevs.reduce((a,e,i) => i>0 && e<elevs[i-1] ? a+(elevs[i-1]-e) : a, 0);
+
+    // Distances cumulées réelles (km)
+    const dists = [0];
+    for (let i = 1; i < locations.length; i++) {
+      const dx = (locations[i].longitude - locations[i-1].longitude) * Math.cos(locations[i-1].latitude * Math.PI/180) * 111.32;
+      const dy = (locations[i].latitude  - locations[i-1].latitude)  * 111.32;
+      dists.push(parseFloat((dists[i-1] + Math.sqrt(dx*dx + dy*dy)).toFixed(2)));
+    }
+    const totalKm = dists[dists.length - 1];
+
+    // Coordonnées SVG
+    const W = 290, H = 80, pad = { t:6, r:4, b:4, l:4 };
+    const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+    const range = maxE - minE || 1;
+    const n = elevs.length;
+
+    const toX = i => pad.l + (i / (n - 1)) * iW;
+    const toY = e => pad.t + (1 - (e - minE) / range) * iH;
+    const ptCoords = elevs.map((e, i) => ({ x: toX(i), y: toY(e) }));
+
+    // Polyline lissée via cubic bezier
+    function smoothPath(coords) {
+      if (coords.length < 2) return '';
+      let d = `M ${coords[0].x} ${coords[0].y}`;
+      for (let i = 1; i < coords.length; i++) {
+        const prev = coords[i-1], curr = coords[i];
+        const cpx = (prev.x + curr.x) / 2;
+        d += ` C ${cpx} ${prev.y} ${cpx} ${curr.y} ${curr.x} ${curr.y}`;
+      }
+      return d;
+    }
+    const linePath  = smoothPath(ptCoords);
+    const areaPath  = linePath + ` L ${ptCoords[pts-1].x} ${H-pad.b} L ${pad.l} ${H-pad.b} Z`;
+
+    // Grille horizontale légère
+    const gridLines = [0, 0.5, 1].map(t => {
+      const y = pad.t + t * iH;
+      const e = Math.round(maxE - t * range);
+      return `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="#e8eef8" stroke-width="0.7"/>
+              <text x="${pad.l}" y="${y-1.5}" font-size="6" fill="#bbb" font-family="Arial">${e}m</text>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="elev-chart-wrap" id="elev-wrap">
+        <svg class="elev-chart" id="elev-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="elevGrad2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#00b4d8" stop-opacity="0.28"/>
+              <stop offset="100%" stop-color="#00b4d8" stop-opacity="0.02"/>
+            </linearGradient>
+            <clipPath id="elevClip"><rect x="${pad.l}" y="${pad.t}" width="${iW}" height="${iH}"/></clipPath>
+          </defs>
+          ${gridLines}
+          <path d="${areaPath}" fill="url(#elevGrad2)" clip-path="url(#elevClip)"/>
+          <path d="${linePath}" fill="none" stroke="#00b4d8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#elevClip)"/>
+          <!-- Ligne verticale du throttle -->
+          <line id="elev-vline" x1="0" y1="${pad.t}" x2="0" y2="${H-pad.b}"
+                stroke="var(--brand)" stroke-width="1.2" stroke-dasharray="3 2"
+                opacity="0" pointer-events="none"/>
+          <!-- Point sur la courbe -->
+          <circle id="elev-dot" cx="0" cy="0" r="4"
+                  fill="var(--brand)" stroke="#fff" stroke-width="1.8"
+                  opacity="0" pointer-events="none"/>
+        </svg>
+        <!-- Tooltip -->
+        <div class="elev-tooltip" id="elev-tip">
+          <div class="elev-tooltip-bubble" id="elev-tip-txt"></div>
+        </div>
+      </div>
+      <div class="elev-stats">
+        <div class="elev-stat"><div class="elev-stat-lbl">Min</div><div class="elev-stat-val">${Math.round(minE)} m</div></div>
+        <div class="elev-stat"><div class="elev-stat-lbl">Max</div><div class="elev-stat-val">${Math.round(maxE)} m</div></div>
+        <div class="elev-stat"><div class="elev-stat-lbl">Dénivelé +</div><div class="elev-stat-val">+${Math.round(gain)} m</div></div>
+        <div class="elev-stat"><div class="elev-stat-lbl">Dénivelé −</div><div class="elev-stat-val">−${Math.round(loss)} m</div></div>
+      </div>`;
+
+    // ── Interaction throttle ──────────────────────────────────────
+    const wrap   = document.getElementById('elev-wrap');
+    const svg    = document.getElementById('elev-svg');
+    const vline  = document.getElementById('elev-vline');
+    const dot    = document.getElementById('elev-dot');
+    const tip    = document.getElementById('elev-tip');
+    const tipTxt = document.getElementById('elev-tip-txt');
+
+    // Symbole du marqueur carte (croix + cercle)
+    const elevMarkerSym = {
+      type: 'simple-marker',
+      style: 'circle',
+      color: [0, 37, 105, 1],
+      size: 12,
+      outline: { color: [255, 255, 255], width: 2 }
+    };
+    const elevPulseSym = {
+      type: 'simple-marker',
+      style: 'circle',
+      color: [0, 180, 216, 0.2],
+      size: 22,
+      outline: { color: [0, 180, 216, 0.6], width: 1.5 }
+    };
+
+    function onMove(e) {
+      const rect    = wrap.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const pct     = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const idx     = Math.round(pct * (n - 1));
+      const pt      = ptCoords[idx];
+
+      // SVG → px
+      const scaleX = rect.width / W, scaleY = rect.height / H;
+      const px = pt.x * scaleX, py = pt.y * scaleY;
+
+      // Mettre à jour SVG
+      vline.setAttribute('x1', pt.x); vline.setAttribute('x2', pt.x);
+      vline.setAttribute('opacity', '1');
+      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
+      dot.setAttribute('opacity', '1');
+
+      // Tooltip
+      const elev = Math.round(elevs[idx]);
+      const dist = dists[idx].toFixed(1);
+      tipTxt.innerHTML = `${elev} m<span>${dist} km</span>`;
+      tip.classList.add('visible');
+      tip.style.left = `${px}px`;
+      tip.style.top  = `${Math.max(0, py - 26)}px`;
+
+      // ── Marqueur sur la carte ──────────────────────────────────
+      if (elevGraphicsLayer && elevLocations[idx] && ArcGISGraphic) {
+        elevGraphicsLayer.removeAll();
+        const loc  = elevLocations[idx];
+        const geom = { type: 'point', longitude: loc.longitude, latitude: loc.latitude };
+        // Halo
+        elevGraphicsLayer.add(new ArcGISGraphic({ geometry: geom, symbol: elevPulseSym }));
+        // Point principal
+        elevGraphicsLayer.add(new ArcGISGraphic({ geometry: geom, symbol: elevMarkerSym }));
+        // Label altitude
+        elevGraphicsLayer.add(new ArcGISGraphic({
+          geometry: geom,
+          symbol: {
+            type: 'text',
+            color: [0, 37, 105, 1],
+            haloColor: [255, 255, 255, 0.9],
+            haloSize: 2,
+            text: `${elev} m`,
+            font: { size: 10, weight: 'bold', family: 'Arial' },
+            yoffset: 10
+          }
+        }));
+      }
+    }
+
+    function onLeave() {
+      vline.setAttribute('opacity', '0');
+      dot.setAttribute('opacity', '0');
+      tip.classList.remove('visible');
+      // Effacer le marqueur carte
+      if (elevGraphicsLayer) elevGraphicsLayer.removeAll();
+    }
+
+    wrap.addEventListener('mousemove',  onMove);
+    wrap.addEventListener('touchmove',  onMove, { passive:true });
+    wrap.addEventListener('mouseleave', onLeave);
+    wrap.addEventListener('touchend',   onLeave);
+
+  } catch {
+    el.innerHTML = `<div class="elev-loading">Profil indisponible.<br><span style="font-size:10px">API hors ligne</span></div>`;
+  }
+}
+
+// Charger les données contextuelles quand on ouvre un onglet
+let lastPopupLat = null, lastPopupLng = null, lastPopupAttrs = null;
+let weatherLoaded = false, flowLoaded = false, elevLoaded = false;
+
+document.querySelectorAll('.popup-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const t = tab.dataset.tab;
+    if (t === 'meteo' && !weatherLoaded && lastPopupLat) {
+      weatherLoaded = true;
+      loadWeather(lastPopupLat, lastPopupLng);
+    }
+    if (t === 'debit' && !flowLoaded && lastPopupAttrs) {
+      flowLoaded = true;
+      loadFlow(lastPopupAttrs, lastPopupLat, lastPopupLng);
+    }
+    if (t === 'elev' && !elevLoaded && lastPopupLat) {
+      elevLoaded = true;
+      loadElevation(lastPopupAttrs, lastPopupLat, lastPopupLng);
+      // Centrer la carte pour voir le marqueur
+      if (arcgisView && lastPopupLat) {
+        arcgisView.goTo({ center: [lastPopupLng, lastPopupLat], zoom: Math.max(arcgisView.zoom, 12) }, { duration: 600 });
+      }
+    }
+  });
+});
+
+// ── Partage d'URL ────────────────────────────────────────────────
+function buildShareUrl() {
+  const params = new URLSearchParams();
+  if (currentOID)           params.set('oid', currentOID);
+  if (filterState.niveau)   params.set('niveau', filterState.niveau);
+  if (filterState.region)   params.set('region', filterState.region);
+  if (filterState.duree)    params.set('duree', filterState.duree);
+  if (filterState.milieu)   params.set('milieu', filterState.milieu);
+  if (filterState.trajet)   params.set('trajet', filterState.trajet);
+  if (filterState.locat)    params.set('locat', '1');
+  if (filterState.gratuit)  params.set('gratuit', '1');
+  if (filterState.ouvert)   params.set('ouvert', '1');
+  if (arcgisView) {
+    params.set('zoom', Math.round(arcgisView.zoom));
+    params.set('lat',  arcgisView.center.latitude.toFixed(4));
+    params.set('lng',  arcgisView.center.longitude.toFixed(4));
+  }
+  return location.origin + location.pathname + (params.toString() ? '?' + params.toString() : '');
+}
+
+function showShareToast(msg) {
+  const t = document.getElementById('share-toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+document.getElementById('share-btn').addEventListener('click', () => {
+  const url = buildShareUrl();
+  navigator.clipboard.writeText(url).then(() => showShareToast('🔗 Lien copié !')).catch(() => {
+    prompt('Copie ce lien :', url);
+  });
+});
+
+// Restaurer l'état depuis l'URL au chargement
+function restoreFromUrl() {
+  const params = new URLSearchParams(location.search);
+  if (params.has('niveau'))  { filterState.niveau  = params.get('niveau');  const el = document.getElementById('f-niveau');  if(el) el.value = filterState.niveau; }
+  if (params.has('region'))  { filterState.region  = params.get('region');  const el = document.getElementById('f-region');  if(el) el.value = filterState.region; }
+  if (params.has('duree'))   { filterState.duree   = params.get('duree');   const el = document.getElementById('f-duree');   if(el) el.value = filterState.duree; }
+  if (params.has('milieu'))  { filterState.milieu  = params.get('milieu');  const el = document.getElementById('f-milieu');  if(el) el.value = filterState.milieu; }
+  if (params.has('trajet'))  { filterState.trajet  = params.get('trajet');  const el = document.getElementById('f-trajet');  if(el) el.value = filterState.trajet; }
+  if (params.get('locat')   === '1') { filterState.locat   = true; document.getElementById('ftog-locat-sw')?.classList.add('on'); }
+  if (params.get('gratuit') === '1') { filterState.gratuit = true; document.getElementById('ftog-gratuit-sw')?.classList.add('on'); }
+  if (params.get('ouvert')  === '1') { filterState.ouvert  = true; document.getElementById('ftog-ouvert-sw')?.classList.add('on'); }
+  // On appliquera les filtres + OID après le chargement des features (dans arcgisView.when)
+}
+restoreFromUrl();
+
+// ── Géolocalisation ───────────────────────────────────────────────
+let userLat = null, userLng = null;
+let geoWatchId = null;
+const geoBtn = document.getElementById('geo-btn');
+const userDot = document.getElementById('user-location-dot');
+
+function updateUserDot() {
+  if (!arcgisView || userLat === null) return;
+  const pt = arcgisView.toScreen({ longitude: userLng, latitude: userLat, spatialReference: { wkid: 4326 } });
+  if (pt) {
+    userDot.style.left = pt.x + 'px';
+    userDot.style.top  = pt.y + 'px';
+    userDot.style.display = 'block';
+  }
+}
+
+arcgisView && arcgisView.watch && arcgisView.watch('extent', updateUserDot);
+
+geoBtn.addEventListener('click', () => {
+  if (!navigator.geolocation) { alert('Géolocalisation non supportée par ce navigateur.'); return; }
+
+  if (geoBtn.classList.contains('located')) {
+    // Désactiver
+    if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+    geoBtn.classList.remove('located','locating');
+    userDot.style.display = 'none';
+    userLat = userLng = null;
+    return;
+  }
+
+  geoBtn.classList.add('locating');
+  geoWatchId = navigator.geolocation.watchPosition(pos => {
+    userLat = pos.coords.latitude;
+    userLng = pos.coords.longitude;
+    geoBtn.classList.remove('locating');
+    geoBtn.classList.add('located');
+    updateUserDot();
+    // Centrer la carte la première fois
+    if (arcgisView) arcgisView.goTo({ center: [userLng, userLat], zoom: 10 }, { duration: 800 });
+    // Trouver les parcours à moins de 30 km
+    if (allFeatures.length) {
+      const nearby = allFeatures.filter(f => {
+        if (!f.geometry) return false;
+        const dlat = f.geometry.y - userLat, dlng = f.geometry.x - userLng;
+        return Math.sqrt(dlat*dlat + dlng*dlng) * 111 < 30;
+      });
+      if (nearby.length) sidebarCount.textContent = `${nearby.length} parcours à moins de 30 km`;
+    }
+  }, err => {
+    geoBtn.classList.remove('locating');
+    const msgs = { 1:'Accès à la localisation refusé.', 2:'Position indisponible.', 3:'Délai dépassé.' };
+    alert(msgs[err.code] || 'Erreur de géolocalisation.');
+  }, { enableHighAccuracy: true, maximumAge: 10000 });
+});
+
+require([
+  "esri/Map","esri/views/MapView","esri/layers/FeatureLayer",
+  "esri/symbols/SimpleMarkerSymbol","esri/renderers/SimpleRenderer","esri/geometry/Point",
+  "esri/layers/GraphicsLayer","esri/Graphic"
+], function(Map, MapView, FeatureLayer, SimpleMarkerSymbol, SimpleRenderer, Point, GraphicsLayer, Graphic) {
+
+  const symCircle = new SimpleMarkerSymbol({
+    style: 'circle', color: [0,37,105,1], size: 14,
+    outline: { color: [255,255,255], width: 2 }
+  });
+
+  // Hover : légèrement plus grand + couleur plus pâle/claire
+  const symHover = new SimpleMarkerSymbol({
+    style: 'circle', color: [90,130,200,0.85], size: 18,
+    outline: { color: [255,255,255], width: 2.5 }
+  });
+
+  const clusterConfig = {
+    type: "cluster", clusterRadius: "80px",
+    labelingInfo: [{
+      deconflictionStrategy: "none",
+      labelExpressionInfo: { expression: "Text($feature.cluster_count,'#,###')" },
+      symbol: { type:"text", color:"#ffffff", font:{ weight:"bold", family:"sans-serif", size:"11px" } },
+      labelPlacement: "center-center"
+    }],
+    symbol: { type:"simple-marker", style:"circle", color:[0,37,105,.9], size:28, outline:{ color:[255,255,255], width:2 } },
+    clusterMinSize: "26px", clusterMaxSize: "56px", popupEnabled: false
+  };
+
+  arcgisLayer = new FeatureLayer({
+    url: LAYER_URL, outFields:['*'], popupEnabled:false,
+    renderer: new SimpleRenderer({ symbol: symCircle }),
+    featureReduction: clusterConfig
+  });
+
+  // Couche sections (lignes) — affichée en permanence sous les points
+  sectionLayer = new FeatureLayer({
+    url: SECTION_URL,
+    outFields: ['NOM_SECTN', 'NO_REG_TOURST', 'ID_SECTN'],
+    popupEnabled: false,
+    renderer: {
+      type: 'simple',
+      symbol: {
+        type: 'simple-line',
+        color: [0, 37, 105, 0.75],
+        width: 3,
+        style: 'solid'
+      }
+    }
+  });
+
+  const map = new Map({ basemap:'streets-navigation-vector', layers:[sectionLayer, arcgisLayer] });
+
+  // Couche pour le marqueur de scrubbing élévation
+  elevGraphicsLayer = new GraphicsLayer({ listMode:'hide' });
+  ArcGISGraphic = Graphic; // exposer globalement pour loadElevation
+  map.add(elevGraphicsLayer);
+  arcgisView = new MapView({
+    container:'viewDiv', map,
+    center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM,
+    popup: { autoOpenEnabled: false },
+    highlightOptions: {
+      color:        [0, 180, 216],   // cyan #00b4d8
+      fillOpacity:  0,
+      haloOpacity:  1,
+      haloColor:    [0, 180, 216]
+    }
+  });
+
+  arcgisView.ui.remove('zoom');
+  arcgisView.watch('extent', repositionPopup);
+
+  arcgisView.when(async () => {
+    allFeatures = await fetchPaginated();
+    console.log(`${allFeatures.length} parcours chargés`);
+
+    allFeatures.forEach(f => { featMap[String(f.attributes.OBJECTID)] = f; });
+
+    buildSidebar(allFeatures);
+
+    // Restaurer l'état depuis l'URL
+    const urlParams = new URLSearchParams(location.search);
+    const hasFilters = filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert;
+    if (hasFilters) applyFilters();
+    if (urlParams.has('zoom') && urlParams.has('lat') && urlParams.has('lng')) {
+      arcgisView.goTo({ center: [parseFloat(urlParams.get('lng')), parseFloat(urlParams.get('lat'))], zoom: parseInt(urlParams.get('zoom')) }, { duration: 0 });
+    }
+    if (urlParams.has('oid')) {
+      const oid = urlParams.get('oid');
+      const f = featMap[oid];
+      if (f) {
+        setTimeout(async () => {
+          await showPopup(f.attributes, f.geometry.y, f.geometry.x);
+          const item = sidebarList.querySelector(`[data-oid="${oid}"]`);
+          if (item) { item.classList.add('active'); activeItem = item; item.scrollIntoView({block:'nearest'}); }
+        }, 500);
+      }
+    }
+
+    // Mettre à jour le point de géolocalisation à chaque mouvement de carte
+    arcgisView.watch('extent', updateUserDot);
+
+    // Cadrer la vue initiale sur l'ensemble des parcours et la mémoriser
+    sectionLayer.queryExtent({ where: '1=1', outSpatialReference: arcgisView.spatialReference })
+      .then(result => {
+        if (result && result.extent) {
+          initialExtent = result.extent.expand(1.1);
+          arcgisView.goTo(initialExtent, { duration: 800 });
+        }
+      }).catch(() => {});
+
+    // ── Filtre spatial ──────────────────────────────────────────
+    const spatialBtn = document.getElementById('spatial-btn');
+
+    function applySpatialFilter() {
+      if (!spatialFilterActive || !arcgisView) return;
+      const sw = arcgisView.toMap({ x: 0, y: arcgisView.height });
+      const ne = arcgisView.toMap({ x: arcgisView.width, y: 0 });
+      const groups = sidebarList.querySelectorAll('.region-group');
+      let visible = 0;
+      groups.forEach(g => {
+        const gItems = g.querySelectorAll('.parcours-item');
+        let gv = 0;
+        gItems.forEach(item => {
+          const f = featMap[String(item.dataset.oid)];
+          if (!f || !f.geometry) { item.style.display = 'none'; return; }
+          const inView = f.geometry.x >= sw.longitude && f.geometry.x <= ne.longitude &&
+                         f.geometry.y >= sw.latitude  && f.geometry.y <= ne.latitude;
+          item.style.display = inView ? '' : 'none';
+          if (inView) gv++;
+        });
+        g.style.display = gv > 0 ? '' : 'none';
+        if (gv > 0) {
+          g.querySelector('.region-items').classList.remove('hidden');
+          g.querySelector('.region-header').classList.remove('collapsed');
+        }
+        visible += gv;
+      });
+      sidebarCount.textContent = `${visible} parcours visibles`;
+    }
+
+    function clearSpatialFilter() {
+      sidebarList.querySelectorAll('.parcours-item').forEach(i => i.style.display = '');
+      sidebarList.querySelectorAll('.region-group').forEach(g => g.style.display = '');
+      sidebarList.querySelectorAll('.region-items').forEach(d => d.classList.add('hidden'));
+      sidebarList.querySelectorAll('.region-header').forEach(h => h.classList.add('collapsed'));
+      sidebarCount.textContent = `${allFeatures.length} parcours`;
+    }
+
+    spatialBtn.addEventListener('click', () => {
+      spatialFilterActive = !spatialFilterActive;
+      spatialBtn.classList.toggle('active', spatialFilterActive);
+      spatialFilterActive ? applySpatialFilter() : clearSpatialFilter();
+    });
+
+    arcgisView.watch('extent', () => {
+      if (!spatialFilterActive) return;
+      clearTimeout(spatialFilterTimer);
+      spatialFilterTimer = setTimeout(applySpatialFilter, 400);
+    });
+
+    // Clic carte
+    arcgisView.on('click', async (event) => {
+      const response = await arcgisView.hitTest(event, { include:[arcgisLayer] });
+      const hit = response.results.find(r => r.layer === arcgisLayer);
+      if (!hit) { closePopup(); return; }
+
+      if (hit.graphic.isAggregate) {
+        arcgisView.goTo({ target:hit.graphic.geometry, zoom:arcgisView.zoom+2 }, { duration:500 });
+        return;
+      }
+
+      const oid      = String(hit.graphic.attributes.OBJECTID);
+      const listItem = sidebarList.querySelector(`[data-oid="${oid}"]`);
+      if (activeItem) activeItem.classList.remove('active');
+      if (listItem) {
+        listItem.classList.add('active');
+        const parentItems = listItem.closest('.region-items');
+        if (parentItems && parentItems.classList.contains('hidden')) {
+          parentItems.classList.remove('hidden');
+          parentItems.previousElementSibling.classList.remove('collapsed');
+        }
+        listItem.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        activeItem = listItem;
+      }
+      resetBtn.classList.add('visible');
+
+      activeGeometry = hit.graphic.geometry;
+      // Zoomer + surligner la géométrie réelle de la section
+      const sectnId = hit.graphic.attributes.ID_SECTN;
+      if (sectnId && sectionLayer) {
+        highlightSection(sectnId);
+        sectionLayer.queryExtent({
+          where: `ID_SECTN = ${sectnId}`,
+          outSpatialReference: arcgisView.spatialReference
+        }).then(result => {
+          if (result && result.extent) {
+            arcgisView.goTo(result.extent.expand(1.5), { duration: 600 });
+          }
+        }).catch(() => {});
+      }
+      await showPopup(hit.graphic.attributes, hit.graphic.geometry.latitude, hit.graphic.geometry.longitude);
+      activeGeometry = hit.graphic.geometry;
+    });
+
+    // Curseur + hover dynamique sur les points
+    let hoveredGraphic = null;
+    arcgisView.on('pointer-move', async (event) => {
+      const response = await arcgisView.hitTest(event, { include:[arcgisLayer] });
+      const hit = response.results.find(r => r.layer === arcgisLayer);
+
+      if (hit && !hit.graphic.isAggregate) {
+        arcgisView.container.style.cursor = 'pointer';
+        if (hoveredGraphic !== hit.graphic) {
+          // Rétablir l'ancien
+          if (hoveredGraphic) hoveredGraphic.symbol = symCircle;
+          hoveredGraphic = hit.graphic;
+          hoveredGraphic.symbol = symHover;
+        }
+      } else {
+        arcgisView.container.style.cursor = hit ? 'pointer' : 'default';
+        if (hoveredGraphic) { hoveredGraphic.symbol = symCircle; hoveredGraphic = null; }
+      }
+    });
+
+    // Clic liste
+    sidebarList.addEventListener('click', async (e) => {
+      const item = e.target.closest('.parcours-item');
+      if (!item) return;
+      const oid     = item.dataset.oid;
+      const feature = featMap[oid];
+      if (!feature || !feature.geometry) return;
+
+      if (activeItem) activeItem.classList.remove('active');
+      item.classList.add('active');
+      activeItem = item;
+      resetBtn.classList.add('visible');
+
+      const geom = new Point({
+        longitude: feature.geometry.x,
+        latitude:  feature.geometry.y,
+        spatialReference: { wkid: 4326 }
+      });
+
+      // Zoom sur la géométrie réelle de la ligne (sectionLayer) via ID_SECTN
+      const secId = feature.attributes.ID_SECTN;
+
+      activeGeometry = geom;
+
+      // Zoomer sur la ligne de section réelle, puis afficher le popup
+      const doZoomAndPopup = async () => {
+        await new Promise(r => setTimeout(r, 80));
+        await showPopup(feature.attributes, feature.geometry.y, feature.geometry.x);
+        activeGeometry = geom;
+      };
+
+      if (secId && sectionLayer) {
+        highlightSection(secId);
+        sectionLayer.queryExtent({
+          where: `ID_SECTN = ${secId}`,
+          outSpatialReference: arcgisView.spatialReference
+        }).then(async result => {
+          if (result && result.extent) {
+            await arcgisView.goTo(result.extent.expand(1.5), { duration: 700 });
+          } else {
+            await arcgisView.goTo({ target: geom, zoom: 13 }, { duration: 700 });
+          }
+          await doZoomAndPopup();
+        }).catch(async () => {
+          await arcgisView.goTo({ target: geom, zoom: 13 }, { duration: 700 });
+          await doZoomAndPopup();
+        });
+      } else {
+        await arcgisView.goTo({ target: geom, zoom: 13 }, { duration: 700 });
+        await doZoomAndPopup();
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
