@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0"/>
   <title>Carte interactive – La route bleue</title>
 
   <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css"/>
@@ -168,7 +168,7 @@
 
     /* ══ MAP ══════════════════════════════════════════════════════ */
     #map-container { flex:1; position:relative; height:100%; }
-    #viewDiv { width:100%; height:100%; }
+    #viewDiv { width:100%; height:100%; touch-action:none; }
 
     /* Cache les widgets zoom ArcGIS natifs */
     .esri-zoom { display:none !important; }
@@ -197,8 +197,9 @@
 
     /* ══ BASEMAP SWITCHER ══════════════════════════════════════════ */
     #basemap-switcher {
-      position:absolute; bottom:24px; right:16px; z-index:50;
+      position:fixed; bottom:24px; right:16px; z-index:400;
       display:flex; flex-direction:column; align-items:flex-end; gap:6px;
+      transition: bottom 0.32s cubic-bezier(.4,0,.2,1);
     }
     #basemap-toggle {
       width:57px; height:57px; border-radius:12px; border:2.5px solid #fff;
@@ -478,14 +479,11 @@
 
       /* Contrôles carte repositionnés */
       #map-ctrl-extra { top: 12px; left: 12px; }
-      #basemap-switcher { bottom: 90px; right: 10px; transition: bottom 0.32s cubic-bezier(.4,0,.2,1); }
+      #basemap-switcher { right: 10px; }
 
       /* Region hero un peu plus compact */
       .region-hero { height: 68px; }
 
-      /* Basemap remonte quand sidebar fermée */
-      #sidebar.closed ~ #map-container #basemap-switcher,
-      body.sidebar-closed #basemap-switcher { bottom: 24px; }
     }
 
     /* Drag handle barre visible */
@@ -2118,22 +2116,32 @@ function restoreFromUrl() {
 }
 restoreFromUrl();
 
-// ── Drag handle mobile ────────────────────────────────────────────
+// ── Drag handle mobile + gestes touch ────────────────────────────
 (function() {
-  const handle  = document.getElementById('sidebar-drag-handle');
+  const handle    = document.getElementById('sidebar-drag-handle');
   const sidebarEl = document.getElementById('sidebar');
-  const basemap = document.getElementById('basemap-switcher');
+  const basemap   = document.getElementById('basemap-switcher');
+  const mapDiv    = document.getElementById('viewDiv');
   if (!handle) return;
 
+  const SIDEBAR_H = 0.65 * window.innerHeight; // 65vh
+
   function syncBasemap() {
-    if (window.innerWidth > 768 || !basemap) return;
-    if (sidebarEl.classList.contains('closed')) {
+    if (!basemap) return;
+    if (window.innerWidth > 768) {
+      // Desktop : position normale en bas à droite
       basemap.style.bottom = '24px';
+      return;
+    }
+    // Mobile : au-dessus du drawer ouvert ou en bas si fermé
+    if (sidebarEl.classList.contains('closed')) {
+      basemap.style.bottom = '86px'; // juste au-dessus de la bande visible (72px + marge)
     } else {
-      basemap.style.bottom = '90px';
+      basemap.style.bottom = (SIDEBAR_H + 12) + 'px'; // juste au-dessus du drawer
     }
   }
 
+  // ── Geste sur le handle ──
   let startY = 0, startT = 0;
   handle.addEventListener('touchstart', e => {
     startY = e.touches[0].clientY; startT = Date.now();
@@ -2141,17 +2149,17 @@ restoreFromUrl();
   handle.addEventListener('touchend', e => {
     const dy = e.changedTouches[0].clientY - startY;
     const dt = Date.now() - startT;
-    if (dt < 300) {
+    if (dt < 300 && Math.abs(dy) < 20) {
       sidebarEl.classList.toggle('closed');
-    } else if (dy > 60) {
+    } else if (dy > 50) {
       sidebarEl.classList.add('closed');
-    } else if (dy < -60) {
+    } else if (dy < -50) {
       sidebarEl.classList.remove('closed');
     }
     setTimeout(syncBasemap, 350);
   }, { passive: true });
 
-  // Tap sur le header aussi pour toggler sur mobile
+  // ── Tap sur le sidebar-header pour toggler ──
   const header = document.querySelector('.sidebar-header');
   if (header) {
     header.addEventListener('touchend', e => {
@@ -2161,9 +2169,35 @@ restoreFromUrl();
     }, { passive: true });
   }
 
-  // Sync initial + sur resize
+  // ── Swipe vers le haut sur la carte = ouvrir sidebar ──
+  let mapTouchStartY = 0, mapTouchStartX = 0;
+  if (mapDiv) {
+    mapDiv.addEventListener('touchstart', e => {
+      mapTouchStartY = e.touches[0].clientY;
+      mapTouchStartX = e.touches[0].clientX;
+    }, { passive: true });
+    mapDiv.addEventListener('touchend', e => {
+      if (window.innerWidth > 768) return;
+      const dy = e.changedTouches[0].clientY - mapTouchStartY;
+      const dx = e.changedTouches[0].clientX - mapTouchStartX;
+      // Swipe vertical dominant (pas horizontal = pas de rotation carte)
+      if (Math.abs(dy) > Math.abs(dx) + 20) {
+        if (dy < -60 && sidebarEl.classList.contains('closed')) {
+          // Swipe vers le haut = ouvrir sidebar
+          sidebarEl.classList.remove('closed');
+          setTimeout(syncBasemap, 350);
+        } else if (dy > 60 && !sidebarEl.classList.contains('closed')) {
+          // Swipe vers le bas = fermer sidebar
+          sidebarEl.classList.add('closed');
+          setTimeout(syncBasemap, 350);
+        }
+      }
+    }, { passive: true });
+  }
+
+  // ── Sync initial + resize ──
   syncBasemap();
-  window.addEventListener('resize', syncBasemap);
+  window.addEventListener('resize', () => setTimeout(syncBasemap, 50));
 })();
 
 // ── Géolocalisation + Parcours à proximité ────────────────────────
@@ -2411,12 +2445,32 @@ require([
     center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM,
     popup: { autoOpenEnabled: false },
     highlightOptions: {
-      color:        [0, 180, 216, 0.35],   // cyan très pâle
+      color:        [0, 180, 216, 0.35],
       fillOpacity:  0.18,
       haloOpacity:  0.28,
       haloColor:    [0, 180, 216]
+    },
+    // Gestes touch explicitement activés
+    navigation: {
+      mouseWheelZoomEnabled: true,
+      browserTouchPanEnabled: true  // pinch-to-zoom natif du navigateur
     }
   });
+
+  // Double-tap sur la carte = zoom in sur mobile
+  (function() {
+    let lastTap = 0;
+    const vDiv = document.getElementById('viewDiv');
+    vDiv.addEventListener('touchend', e => {
+      if (e.touches.length > 0) return; // ignorer si encore en contact
+      const now = Date.now();
+      if (now - lastTap < 300 && e.changedTouches.length === 1) {
+        // Double-tap = zoom in
+        if (arcgisView) arcgisView.goTo({ zoom: arcgisView.zoom + 1 }, { duration: 250 });
+      }
+      lastTap = now;
+    }, { passive: true });
+  })();
 
   arcgisView.ui.remove('zoom');
   arcgisView.watch('extent', repositionPopup);
