@@ -176,7 +176,7 @@
 
     /* ══ MAP ══════════════════════════════════════════════════════ */
     #map-container { flex:1; position:relative; height:100%; }
-    #viewDiv { width:100%; height:100%; touch-action:none; }
+    #viewDiv { width:100%; height:100%; touch-action:none; min-height:0; }
 
     /* Cache les widgets zoom ArcGIS natifs */
     .esri-zoom { display:none !important; }
@@ -434,7 +434,11 @@
     @media (max-width: 768px) {
       :root { --sidebar-w: 100vw; }
 
-      html, body { flex-direction: column; overflow: hidden; }
+      html, body { flex-direction: column; overflow: hidden; height: 100%; }
+
+      /* La carte prend tout l'espace au-dessus du drawer */
+      #map-container { width: 100%; flex: 1; min-height: 0; }
+      body.sidebar-closed #map-container { flex: none; height: calc(100vh - 72px); }
 
       /* Sidebar en drawer bas sur mobile */
       #sidebar {
@@ -475,15 +479,6 @@
         box-shadow: none; z-index: 310;
       }
       #sidebar-tab svg { display: none; }
-
-      #map-container {
-        width: 100%;
-        height: 35vh;  /* espace visible au-dessus du drawer ouvert (100vh - 65vh) */
-        flex: none;
-        transition: height 0.32s cubic-bezier(.4,0,.2,1);
-      }
-      /* Quand drawer fermé, la carte récupère toute la hauteur sauf la bande */
-      body.sidebar-closed #map-container { height: calc(100vh - 72px); }
 
       /* Popup plein bas sur mobile */
       #custom-popup {
