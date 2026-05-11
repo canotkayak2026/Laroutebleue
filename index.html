@@ -1671,7 +1671,7 @@ sidebarTab.addEventListener('click', () => {
   sidebar.classList.toggle('closed', !sidebarOpen);
   sidebarTab.style.left = sidebarOpen ? 'var(--sidebar-w)' : '0px';
   tabArrow.style.transform = sidebarOpen ? '' : 'rotate(180deg)';
-  setTimeout(() => { if (arcgisView) arcgisView.resize(); }, 310);
+  setTimeout(() => { if (arcgisView && arcgisView.ready) { window.dispatchEvent(new Event("resize")); } }, 310);
 });
 
 // ── Popup tabs ───────────────────────────────────────────────────
@@ -2159,7 +2159,7 @@ restoreFromUrl();
     }
     // Attendre la fin de la transition CSS (320ms) puis forcer le resize ArcGIS
     setTimeout(() => {
-      if (arcgisView) arcgisView.resize();
+      if (arcgisView && arcgisView.ready) { window.dispatchEvent(new Event("resize")); }
     }, 380);
   }
 
@@ -2493,7 +2493,7 @@ require([
   arcgisView.watch('extent', repositionPopup);
   arcgisView.watch('extent', updateUserDot);
   arcgisView.watch('extent', () => {
-    if (window.innerWidth <= 768) arcgisView.resize();
+    if (window.innerWidth <= 768 && arcgisView && arcgisView.ready) { window.dispatchEvent(new Event("resize")); }
   });
 
   arcgisView.when(async () => {
