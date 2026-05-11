@@ -1776,9 +1776,10 @@ async function loadWeather(lat, lng) {
   }
 }
 
-// ── Débit rivières (API MSP → Claude API proxy → tableau CEHQ) ───
-// Le CEHQ ne retourne pas de headers CORS, donc on passe par l'API
-// Anthropic comme proxy serveur pour fetcher le tableau sans blocage.
+// ── Débit rivières (API MSP WFS) ─────────────────────────────────
+// L'API MSP retourne directement : station, fournisseur_url (lien graphique
+// CEHQ), dern_valeur_deb (débit m³/s), dern_valeur_niv (niveau m),
+// description (nom station), dern_date_prise_valeur_utc.
 async function loadFlow(attrs, lat, lng) {
   const el = document.getElementById('flow-content');
   const dmin = attrs.DEBIT_MIN, dmax = attrs.DEBIT_MAX;
@@ -1786,13 +1787,18 @@ async function loadFlow(attrs, lat, lng) {
 
   el.innerHTML = `<div class="flow-loading">Recherche station hydrométrique…</div>`;
 
-  // ── 1. Trouver la station la plus proche via API MSP (CORS ok) ──
-  let noStation = null, stationNom = '', stationDist = null;
+  // ── 1. Fetch API MSP GeoJSON ────────────────────────────────────
+  let graphUrl  = 'https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm';
+  let realValue = null, realUnit = null, realDate = null;
+  let stationNom = '', stationDist = null;
+
   try {
     const wfsUrl = 'https://geoegl.msp.gouv.qc.ca/apis/mapserver-vigilance/ws/vigilance.fcgi' +
       '?service=wfs&version=1.1.0&request=getfeature&typename=stations_igo2_public&outputformat=geojson';
     const res  = await fetch(wfsUrl);
     const data = await res.json();
+
+    // Trouver la station la plus proche (Haversine)
     const toRad = d => d * Math.PI / 180;
     let minDist = Infinity, best = null;
     for (const feat of data.features) {
@@ -1802,68 +1808,37 @@ async function loadFlow(attrs, lat, lng) {
       const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       if (dist < minDist) { minDist = dist; best = feat; }
     }
+
     if (best) {
       const p = best.properties;
-      noStation   = p.no_station || p.nostation || p.station_id || p.identifiant || null;
-      stationNom  = p.nom || p.name || p.nom_station || '';
       stationDist = minDist;
+      stationNom  = p.description || p.plan_deau || '';
+
+      // URL graphique directe depuis le champ fournisseur_url
+      if (p.fournisseur_url && p.fournisseur_url.includes('cehq')) {
+        graphUrl = p.fournisseur_url;
+      } else if (p.station && p.fournisseur_url === null) {
+        graphUrl = `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${p.station}`;
+      }
+
+      // Valeur temps réel — débit en priorité, sinon niveau
+      const deb = parseFloat(p.dern_valeur_deb);
+      const niv = parseFloat(p.dern_valeur_niv);
+      if (!isNaN(deb) && p.dern_valeur_deb !== null && p.dern_valeur_deb !== '') {
+        realValue = deb; realUnit = 'm³/s';
+      } else if (!isNaN(niv) && p.dern_valeur_niv !== null && p.dern_valeur_niv !== '') {
+        realValue = niv; realUnit = 'm';
+      }
+
+      // Heure de la mesure (UTC → afficher tel quel avec mention UTC)
+      if (p.dern_date_prise_valeur_utc) {
+        const d = new Date(p.dern_date_prise_valeur_utc.replace(' ', 'T') + 'Z');
+        // Convertir en HNE (UTC-4 ou UTC-5)
+        const hne = new Date(d.getTime() - 4 * 3600000);
+        realDate = hne.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit' });
+      }
     }
   } catch(e) { /* silencieux */ }
-
-  // ── 2. Fetch du tableau CEHQ via l'API Claude (proxy serveur) ──
-  // Le CEHQ n'a pas de CORS — l'API Anthropic fetch depuis son serveur, pas le browser.
-  let realValue = null, realUnit = null, realDate = null;
-  if (noStation) {
-    try {
-      const tableUrl = `https://www.cehq.gouv.qc.ca/suivihydro/tableau.asp?NoStation=${noStation}`;
-      const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: 'Tu es un extracteur de données. Réponds UNIQUEMENT en JSON valide, sans markdown ni backticks.',
-          messages: [{
-            role: 'user',
-            content: `Fetch cette URL et extrait la PREMIÈRE ligne de données du tableau hydrométrique (la plus récente) : ${tableUrl}
-
-Retourne exactement ce JSON :
-{
-  "valeur": <nombre ou null>,
-  "unite": "m³/s" ou "m",
-  "heure": "<heure HNE ex: 14:30:00>",
-  "nom_station": "<nom de la station>"
-}
-
-Si tu ne peux pas accéder à la page ou extraire les données, retourne {"valeur": null, "unite": null, "heure": null, "nom_station": null}`
-          }],
-          tools: [{
-            type: 'web_search_20250305',
-            name: 'web_search'
-          }]
-        })
-      });
-      const apiData = await apiRes.json();
-      // Extraire le texte de la réponse (peut contenir plusieurs blocs)
-      const txt = (apiData.content || [])
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('');
-      const clean = txt.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
-      if (parsed.valeur != null) {
-        realValue = parseFloat(parsed.valeur);
-        realUnit  = parsed.unite || 'm³/s';
-        realDate  = parsed.heure || '';
-        if (parsed.nom_station && !stationNom) stationNom = parsed.nom_station;
-      }
-    } catch(e) { /* silencieux — fallback affichage statique */ }
-  }
-
-  // ── 3. URLs CEHQ ───────────────────────────────────────────────
-  const graphUrl = noStation
-    ? `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${noStation}`
-    : 'https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm';
 
   // ── 4. Cas sans plage recommandée ──────────────────────────────
   if (!dmin && !dmax) {
