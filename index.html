@@ -436,9 +436,13 @@
 
       html, body { flex-direction: column; overflow: hidden; height: 100%; }
 
-      /* La carte prend tout l'espace au-dessus du drawer */
-      #map-container { width: 100%; flex: 1; min-height: 0; }
-      body.sidebar-closed #map-container { flex: none; height: calc(100vh - 72px); }
+      /* Carte plein écran — sidebar est fixed, donc pas dans le flux */
+      #map-container {
+        width: 100%; height: 100vh !important; flex: none;
+        padding-bottom: 65vh; /* espace pour le drawer ouvert */
+        box-sizing: border-box;
+      }
+      body.sidebar-closed #map-container { padding-bottom: 72px; }
 
       /* Sidebar en drawer bas sur mobile */
       #sidebar {
@@ -471,14 +475,27 @@
         margin: -8px auto 0;
       }
 
-      /* Tab de toggle devient un handle en haut de la sidebar */
+      /* Tab de toggle mobile — grande zone tactile visible */
       #sidebar-tab {
-        position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
-        width: 44px; height: 6px; border-radius: 3px;
-        background: rgba(255,255,255,.4);
-        box-shadow: none; z-index: 310;
+        position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+        width: 120px; height: 36px; border-radius: 18px 18px 0 0;
+        background: var(--brand); color: #fff;
+        box-shadow: 0 -2px 12px rgba(0,0,0,.25);
+        z-index: 400; display: flex; align-items: center; justify-content: center;
+        gap: 6px; font-family: 'Montserrat',sans-serif;
+        font-size: 10px; font-weight: 700; letter-spacing:.06em;
+        transition: transform 0.32s cubic-bezier(.4,0,.2,1), bottom 0s;
+      }
+      #sidebar-tab::before {
+        content: '▲ PARCOURS';
+        font-size: 10px; font-weight: 700; color: #fff;
+        font-family: 'Montserrat',sans-serif; letter-spacing:.08em;
       }
       #sidebar-tab svg { display: none; }
+      /* Cacher le tab quand la sidebar est ouverte */
+      #sidebar:not(.closed) ~ * #sidebar-tab,
+      body:not(.sidebar-closed) #sidebar-tab { opacity: 0; pointer-events: none; }
+      body.sidebar-closed #sidebar-tab { opacity: 1; pointer-events: auto; }
 
       /* Popup plein bas sur mobile */
       #custom-popup {
@@ -874,9 +891,9 @@ const TRAJET_LBL  = { ALL:'Aller simple', ALR:'Aller-retour', BOU:'Boucle' };
 
 // Icônes officielles La route bleue (URLs relatives)
 const MILIEU_ICO = {
-  EC:  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NCIgZmlsbD0id2hpdGUiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSI2Ii8+CiAgPHBhdGggZD0iTTE2IDUyIFEyNSA0NCAzNCA1MiBRNDMgNjAgNTIgNTIgUTYxIDQ0IDcwIDUyIFE3OSA2MCA4NCA1NiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAyNTY5IiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik0xNiA2NiBRMjUgNTggMzQgNjYgUTQzIDc0IDUyIDY2IFE2MSA1OCA3MCA2NiBRNzkgNzQgODQgNzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjIgODAgUTMwIDc0IDM4IDgwIFE0NiA4NiA1NCA4MCBRNjIgNzQgNzAgODAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+',
-  EV:  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NCIgZmlsbD0id2hpdGUiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSI2Ii8+CiAgPHBhdGggZD0iTTE0IDU2IFEyMCA0NiAyOCA1MiBRMzQgNTggNDAgNDggUTQ2IDM2IDU0IDQ0IFE2MiA1MiA2OCA0NCBRNzQgMzYgODIgNDYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KICA8cGF0aCBkPSJNNDIgNTQgTDUwIDQ2IiBzdHJva2U9IiMwMDI1NjkiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTYyIDUyIEw3MiA0NCIgc3Ryb2tlPSIjMDAyNTY5IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik0xNCA3MCBRMjIgNjAgMzAgNjYgUTM4IDcyIDQ2IDY0IFE1NCA1NCA2MiA2MiBRNzAgNzAgNzggNjIgUTg0IDU2IDg0IDYwIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMDI1NjkiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+CiAgPHBhdGggZD0iTTQ0IDcwIEw1MiA2MiIgc3Ryb2tlPSIjMDAyNTY5IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik02NCA2OCBMNzQgNjAiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+',
-  MAR: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NCIgZmlsbD0id2hpdGUiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSI2Ii8+CiAgPHBhdGggZD0iTTE0IDYyIFEyMiA1MCAzMiA1OCBRMzggNjQgNDQgNTYgUTUwIDQ0IDU4IDUyIFE2NCA2MCA3MiA1MiBRNzggNDQgODQgNTAiIGZpbGw9IiMwMDI1NjkiLz4KICA8cGF0aCBkPSJNMTQgNjIgUTIyIDUwIDMyIDU4IFEzOCA2NCA0NCA1NiBRNTAgNDQgNTggNTIgUTY0IDYwIDcyIDUyIFE3OCA0NCA4NCA1MCBMODQgODAgUTcwIDcyIDU2IDgwIFE0MiA4OCAyOCA4MCBaIiBmaWxsPSIjMDAyNTY5Ii8+CiAgPGNpcmNsZSBjeD0iMzgiIGN5PSI2NiIgcj0iMi41IiBmaWxsPSJ3aGl0ZSIvPgogIDxjaXJjbGUgY3g9IjUyIiBjeT0iNjQiIHI9IjIiIGZpbGw9IndoaXRlIi8+CiAgPGNpcmNsZSBjeD0iNjIiIGN5PSI2OCIgcj0iMiIgZmlsbD0id2hpdGUiLz4KICA8cGF0aCBkPSJNMjAgNzUgUTMwIDY4IDQwIDc0IFE1MCA4MCA2MCA3NCBRNzAgNjggODAgNzUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMjU2OSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNSIvPgo8L3N2Zz4='
+  EC:  'icons/Eau_calme.svg',
+  EV:  'icons/Eau_vive.svg',
+  MAR: 'icons/Marin.svg'
 };
 const MILIEU_LBL  = { EC:'Eau calme', EV:'Eau vive', MAR:'Marin/Fleuve' };
 
@@ -1102,7 +1119,7 @@ function buildSidebar(features) {
       const iconSrc = MILIEU_ICO[m];
       const label   = MILIEU_LBL[m] || m;
       return `<div class="region-milieu-pill">
-        ${iconSrc ? `<img src="${iconSrc}" alt="${label}"/>` : ''}
+        ${iconSrc ? `<img src="${iconSrc}" alt="${label}" onerror="this.style.display='none'"/>` : ''}
         <span>${label}</span>
       </div>`;
     }).join('');
@@ -1247,7 +1264,7 @@ function buildSidebar(features) {
       const milieu = p.TYPE_MILIEUX || 'DEF';
       const iconSrc  = MILIEU_ICO[milieu];
       const iconHTML = iconSrc
-        ? `<img src="${iconSrc}" alt="${MILIEU_LBL[milieu] || milieu}"/>`
+        ? `<img src="${iconSrc}" alt="${MILIEU_LBL[milieu] || milieu}" onerror="this.style.display='none'"/>`
         : '🛶';
 
       // Chips de la liste
@@ -1662,16 +1679,24 @@ document.addEventListener('fullscreenchange', () => {
 // Sidebar toggle
 const sidebar    = document.getElementById('sidebar');
 const sidebarTab = document.getElementById('sidebar-tab');
-const tabArrow   = sidebarTab.querySelector('svg');
+const tabArrow   = sidebarTab ? sidebarTab.querySelector('svg') : null;
 const SIDEBAR_W  = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) || 340;
 let sidebarOpen  = true;
 
-sidebarTab.addEventListener('click', () => {
-  sidebarOpen = !sidebarOpen;
-  sidebar.classList.toggle('closed', !sidebarOpen);
-  sidebarTab.style.left = sidebarOpen ? 'var(--sidebar-w)' : '0px';
-  tabArrow.style.transform = sidebarOpen ? '' : 'rotate(180deg)';
-  setTimeout(() => { if (arcgisView && arcgisView.ready) { window.dispatchEvent(new Event("resize")); } }, 310);
+sidebarTab && sidebarTab.addEventListener('click', () => {
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    // Sur mobile, le tab ouvre toujours la sidebar
+    sidebar.classList.remove('closed');
+    document.body.classList.remove('sidebar-closed');
+    syncBasemap && syncBasemap();
+  } else {
+    sidebarOpen = !sidebarOpen;
+    sidebar.classList.toggle('closed', !sidebarOpen);
+    sidebarTab.style.left = sidebarOpen ? 'var(--sidebar-w)' : '0px';
+    if (tabArrow) tabArrow.style.transform = sidebarOpen ? '' : 'rotate(180deg)';
+  }
+  setTimeout(() => { if (arcgisView && arcgisView.ready) window.dispatchEvent(new Event('resize')); }, 350);
 });
 
 // ── Popup tabs ───────────────────────────────────────────────────
@@ -2151,13 +2176,12 @@ restoreFromUrl();
       return;
     }
     if (sidebarEl.classList.contains('closed')) {
-      basemap.style.bottom = '86px';
+      basemap.style.bottom = '50px'; // juste au-dessus du bouton "▲ PARCOURS"
       document.body.classList.add('sidebar-closed');
     } else {
       basemap.style.bottom = (SIDEBAR_H + 12) + 'px';
       document.body.classList.remove('sidebar-closed');
     }
-    // Attendre la fin de la transition CSS (320ms) puis forcer le resize ArcGIS
     setTimeout(() => {
       if (arcgisView && arcgisView.ready) { window.dispatchEvent(new Event("resize")); }
     }, 380);
