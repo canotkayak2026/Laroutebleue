@@ -468,7 +468,14 @@
       }
       #sidebar-tab svg { display: none; }
 
-      #map-container { width: 100%; height: 100vh; flex: none; }
+      #map-container {
+        width: 100%;
+        height: 35vh;  /* espace visible au-dessus du drawer ouvert (100vh - 65vh) */
+        flex: none;
+        transition: height 0.32s cubic-bezier(.4,0,.2,1);
+      }
+      /* Quand drawer fermé, la carte récupère toute la hauteur sauf la bande */
+      body.sidebar-closed #map-container { height: calc(100vh - 72px); }
 
       /* Popup plein bas sur mobile */
       #custom-popup {
@@ -2129,16 +2136,19 @@ restoreFromUrl();
   function syncBasemap() {
     if (!basemap) return;
     if (window.innerWidth > 768) {
-      // Desktop : position normale en bas à droite
       basemap.style.bottom = '24px';
+      document.body.classList.remove('sidebar-closed');
       return;
     }
-    // Mobile : au-dessus du drawer ouvert ou en bas si fermé
     if (sidebarEl.classList.contains('closed')) {
-      basemap.style.bottom = '86px'; // juste au-dessus de la bande visible (72px + marge)
+      basemap.style.bottom = '86px';
+      document.body.classList.add('sidebar-closed');
     } else {
-      basemap.style.bottom = (SIDEBAR_H + 12) + 'px'; // juste au-dessus du drawer
+      basemap.style.bottom = (SIDEBAR_H + 12) + 'px';
+      document.body.classList.remove('sidebar-closed');
     }
+    // Redimensionner la carte ArcGIS pour qu'elle occupe le bon espace
+    if (arcgisView) setTimeout(() => arcgisView.resize(), 350);
   }
 
   // ── Geste sur le handle ──
@@ -2450,31 +2460,25 @@ require([
       haloOpacity:  0.28,
       haloColor:    [0, 180, 216]
     },
-    // Gestes touch explicitement activés
     navigation: {
       mouseWheelZoomEnabled: true,
-      browserTouchPanEnabled: true  // pinch-to-zoom natif du navigateur
+      browserTouchPanEnabled: false  // ArcGIS gère lui-même le pinch — NE PAS déléguer au navigateur
     }
   });
 
-  // Double-tap sur la carte = zoom in sur mobile
-  (function() {
-    let lastTap = 0;
-    const vDiv = document.getElementById('viewDiv');
-    vDiv.addEventListener('touchend', e => {
-      if (e.touches.length > 0) return; // ignorer si encore en contact
-      const now = Date.now();
-      if (now - lastTap < 300 && e.changedTouches.length === 1) {
-        // Double-tap = zoom in
-        if (arcgisView) arcgisView.goTo({ zoom: arcgisView.zoom + 1 }, { duration: 250 });
-      }
-      lastTap = now;
-    }, { passive: true });
-  })();
+  // Double-tap via l'API ArcGIS (evite les conflits avec passive listener)
+  arcgisView.on('double-click', event => {
+    event.stopPropagation();
+    arcgisView.goTo({ zoom: arcgisView.zoom + 1, center: event.mapPoint }, { duration: 300 });
+  });
 
   arcgisView.ui.remove('zoom');
   arcgisView.watch('extent', repositionPopup);
-  arcgisView.watch('extent', updateUserDot);  // met à jour le point GPS quand la carte bouge
+  arcgisView.watch('extent', updateUserDot);
+  arcgisView.watch('extent', () => {
+    // Redimensionner la carte quand la sidebar change de taille
+    if (window.innerWidth <= 768) arcgisView.resize();
+  });
 
   arcgisView.when(async () => {
     allFeatures = await fetchPaginated();
@@ -2678,15 +2682,4 @@ require([
           await doZoomAndPopup();
         }).catch(async () => {
           await arcgisView.goTo({ target: geom, zoom: 13 }, { duration: 700 });
-          await doZoomAndPopup();
-        });
-      } else {
-        await arcgisView.goTo({ target: geom, zoom: 13 }, { duration: 700 });
-        await doZoomAndPopup();
-      }
-    });
-  });
-});
-</script>
-</body>
-</html>
+    
