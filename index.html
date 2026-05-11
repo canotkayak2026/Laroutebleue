@@ -1790,11 +1790,11 @@ async function loadFlow(attrs, lat, lng) {
   // ── 1. Fetch API MSP GeoJSON ────────────────────────────────────
   let graphUrl  = 'https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm';
   let realValue = null, realUnit = null, realDate = null;
-  let stationNom = '', stationDist = null;
+  let stationNom = '', stationDist = null, stationNo = null;
 
   try {
     const wfsUrl = 'https://geoegl.msp.gouv.qc.ca/apis/mapserver-vigilance/ws/vigilance.fcgi' +
-      '?service=wfs&version=1.1.0&request=getfeature&typename=stations_igo2_public&outputformat=geojson';
+      '?service=wfs&version=1.1.0&request=getfeature&typename=stations_igo2_public&outputformat=geojson&srsname=EPSG:4326';
     const res  = await fetch(wfsUrl);
     const data = await res.json();
 
@@ -1812,6 +1812,7 @@ async function loadFlow(attrs, lat, lng) {
     if (best) {
       const p = best.properties;
       stationDist = minDist;
+      stationNo   = p.station || null;
       stationNom  = p.description || p.plan_deau || '';
 
       // URL graphique directe depuis le champ fournisseur_url
@@ -1877,41 +1878,27 @@ async function loadFlow(attrs, lat, lng) {
   // ── 6. Bloc valeur temps réel ───────────────────────────────────
   let realHtml = '';
   if (realValue != null) {
-    const valFmt  = Number.isInteger(realValue) ? realValue : realValue.toFixed(2);
-    const stNote  = [stationNom, stationDist != null ? `${stationDist.toFixed(1)} km` : ''].filter(Boolean).join(' · ');
+    const valFmt = Number.isInteger(realValue) ? realValue : realValue.toFixed(2);
+    const stNote = [stationNom, stationDist != null ? `${stationDist.toFixed(1)} km` : ''].filter(Boolean).join(' · ');
     realHtml = `
-      <div style="display:flex;align-items:center;justify-content:space-between;
-                  background:var(--mist);border-radius:8px;padding:8px 10px;margin-top:6px">
-        <div>
-          <div style="font-size:8.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px">
-            Mesure actuelle${realDate ? ' · ' + realDate + ' HNE' : ''}
-          </div>
-          <div style="display:flex;align-items:baseline;gap:3px">
-            <span style="font-size:22px;font-weight:700;color:var(--ink)">${valFmt}</span>
-            <span style="font-size:10px;color:#888">${realUnit || ''}</span>
-          </div>
-          ${stNote ? `<div style="font-size:8.5px;color:#bbb;margin-top:2px">${stNote}</div>` : ''}
+      <div style="background:var(--mist);border-radius:8px;padding:8px 10px;margin-top:6px">
+        <div style="font-size:8.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px">
+          Débit actuel${realDate ? ' · ' + realDate + ' HNE' : ''}
         </div>
-        <a href="${graphUrl}" target="_blank"
-           style="display:flex;flex-direction:column;align-items:center;gap:2px;text-decoration:none;
-                  background:var(--brand);color:#fff;padding:6px 10px;border-radius:8px;
-                  font-size:9px;font-weight:700;letter-spacing:.04em;transition:background .15s;flex-shrink:0"
-           onmouseover="this.style.background='var(--brand-2)'"
-           onmouseout="this.style.background='var(--brand)'">
-          📈 Graphique<br><span style="font-size:8px;opacity:.75;font-weight:400">CEHQ ↗</span>
-        </a>
+        <div style="display:flex;align-items:baseline;gap:3px">
+          <span style="font-size:22px;font-weight:700;color:var(--ink)">${valFmt}</span>
+          <span style="font-size:10px;color:#888">${realUnit || ''}</span>
+        </div>
+        ${stNote || stationNo ? `<div style="font-size:8.5px;color:#bbb;margin-top:2px">${[stNote, stationNo ? `#${stationNo}` : ''].filter(Boolean).join(' · ')}</div>` : ''}
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:#aaa;line-height:1.5">
+        Débit en temps réel : <a href="${graphUrl}" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
       </div>`;
   } else {
-    const stNote = stationDist != null ? `Station à ${stationDist.toFixed(1)} km` : '';
     realHtml = `
-      <div style="display:flex;align-items:center;justify-content:space-between;
-                  margin-top:6px;padding:4px 0;border-top:1px solid #f0f0f0">
-        <span style="font-size:9.5px;color:#bbb">${stNote}</span>
-        <a href="${graphUrl}" target="_blank"
-           style="display:inline-flex;align-items:center;gap:4px;font-size:10px;
-                  font-weight:600;color:var(--accent);text-decoration:none;">
-          📈 Graphique CEHQ ↗
-        </a>
+      <div style="margin-top:8px;font-size:10px;color:#aaa;line-height:1.5">
+        Débit en temps réel : <a href="${graphUrl}" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
+        ${stationNo ? `<span style="font-size:9px;color:#ccc">· #${stationNo}</span>` : ''}
       </div>`;
   }
 
