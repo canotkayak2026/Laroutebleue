@@ -1776,39 +1776,123 @@ async function loadWeather(lat, lng) {
   }
 }
 
-// ── Débit rivières (MELCCFP / CEHQ via API publique) ─────────────
-// Utilise le débit min/max du parcours comme contexte, et l'API HYDAT pour le débit réel
+// ── Débit rivières (API MSP + CEHQ) ──────────────────────────────
+// Utilise l'API WFS publique du MSP pour trouver la station la plus proche
+// et afficher le débit en temps réel, avec lien direct vers le graphique CEHQ.
 async function loadFlow(attrs, lat, lng) {
   const el = document.getElementById('flow-content');
   const dmin = attrs.DEBIT_MIN, dmax = attrs.DEBIT_MAX;
   const nomEau = attrs.NOM_PLAN_EAU || '';
 
-  // Essayer l'API CEHQ via le proxy wateroffice
+  // Afficher un état de chargement
+  el.innerHTML = `<div class="flow-loading">⏳ Recherche de la station proche…</div>`;
+
+  // ── 1. Fetch toutes les stations MSP (CEHQ + partenaires) en GeoJSON ──
+  let nearestStation = null;
   let realFlow = null;
   try {
-    // Chercher une station proche via l'API Environment Canada (HYDAT)
-    const stationsRes = await fetch(`https://wateroffice.ec.gc.ca/services/real_time_data/json/inline?stations=&parameters=47&start_date=${new Date().toISOString().split('T')[0]}&end_date=${new Date().toISOString().split('T')[0]}`);
-    // API nécessite CORS — on affiche les données contextuelles du parcours à la place
-  } catch {}
+    const url = 'https://geoegl.msp.gouv.qc.ca/apis/mapserver-vigilance/ws/vigilance.fcgi' +
+      '?service=wfs&version=1.1.0&request=getfeature&typename=stations_igo2_public&outputformat=geojson';
+    const res  = await fetch(url);
+    const data = await res.json();
 
-  // Construire l'affichage avec les données du parcours + note sur le débit en temps réel
+    // Calculer la distance (Haversine simplifié) et trouver la plus proche
+    const toRad = d => d * Math.PI / 180;
+    let minDist = Infinity;
+    for (const feat of data.features) {
+      const [sLng, sLat] = feat.geometry.coordinates;
+      const dLat = toRad(sLat - lat);
+      const dLon = toRad(sLng - lng);
+      const a = Math.sin(dLat/2)**2 +
+                Math.cos(toRad(lat)) * Math.cos(toRad(sLat)) * Math.sin(dLon/2)**2;
+      const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); // km
+      if (dist < minDist) { minDist = dist; nearestStation = { feat, dist }; }
+    }
+
+    if (nearestStation) {
+      const p = nearestStation.feat.properties;
+      // Le débit est dans la propriété "debit" (m³/s), peut être null si indisponible
+      realFlow = p.debit != null ? parseFloat(p.debit) : null;
+      nearestStation.noStation = p.no_station || p.station_id || p.identifiant || null;
+      nearestStation.nom       = p.nom || p.name || '';
+      nearestStation.dist      = nearestStation.dist;
+    }
+  } catch (e) {
+    // Silencieux — on affichera quand même les données du parcours
+  }
+
+  // ── 2. Construire l'URL vers le graphique CEHQ ─────────────────
+  const noSt = nearestStation?.noStation;
+  const cehqUrl = noSt
+    ? `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${noSt}`
+    : 'https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm';
+
+  // ── 3. Cas sans min/max dans les attributs ─────────────────────
   if (!dmin && !dmax) {
+    const flowTxt = realFlow != null
+      ? `<span style="font-size:22px;font-weight:700;color:var(--ink)">${realFlow.toFixed(1)}</span><span style="font-size:11px;color:#888"> m³/s</span>`
+      : '';
+    const distTxt = nearestStation ? `(station à ${nearestStation.dist.toFixed(1)} km)` : '';
     el.innerHTML = `
       <div class="flow-header">Conditions de débit</div>
-      <div style="padding:8px 0;font-size:11px;color:#888;line-height:1.6">
-        Aucune donnée de débit disponible pour ce parcours.<br>
-        <a href="https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm" target="_blank" style="color:var(--accent)">Consulter le CEHQ →</a>
-      </div>`;
+      ${flowTxt ? `<div style="margin:6px 0 2px">${flowTxt}</div>` : ''}
+      <div style="padding:4px 0;font-size:11px;color:#888;line-height:1.6">
+        Aucune plage recommandée pour ce parcours.<br>
+        <span style="font-size:9px;color:#bbb">${distTxt}</span>
+      </div>
+      <a href="${cehqUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;">
+        📈 Voir graphique CEHQ ↗
+      </a>`;
     return;
   }
 
-  const mid = dmin && dmax ? (dmin + dmax) / 2 : (dmin || dmax);
-  const pct = dmin && dmax ? 50 : 60;
-
-  // Évaluer les conditions
+  // ── 4. Calcul de la barre et du statut ────────────────────────
+  let pct = 50; // défaut
   let statusClass = 'ok', statusLabel = '✓ Conditions favorables';
-  if (dmin > 80) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
-  else if (dmax < 5) { statusClass = 'low'; statusLabel = '⚠ Débit faible'; }
+
+  if (realFlow != null && dmin != null && dmax != null) {
+    // Positionner la barre selon le débit réel dans la plage [0, dmax*1.5]
+    const scale = dmax * 1.5;
+    pct = Math.min(100, Math.max(0, (realFlow / scale) * 100));
+
+    if (realFlow < dmin)       { statusClass = 'low';  statusLabel = '⚠ Débit trop faible'; }
+    else if (realFlow > dmax)  { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
+    else                       { statusClass = 'ok';   statusLabel = '✓ Conditions favorables'; }
+  } else {
+    // Pas de débit réel → évaluer d'après la plage seulement
+    if (dmin > 80)      { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
+    else if (dmax < 5)  { statusClass = 'low';  statusLabel = '⚠ Débit faible'; }
+    pct = 50;
+  }
+
+  // ── 5. Section débit réel ─────────────────────────────────────
+  let realFlowHtml = '';
+  if (realFlow != null) {
+    const distLabel = nearestStation ? ` · station à ${nearestStation.dist.toFixed(1)} km` : '';
+    const stNom = nearestStation?.nom ? nearestStation.nom : '';
+    realFlowHtml = `
+      <div style="display:flex;align-items:center;justify-content:space-between;background:var(--mist);border-radius:8px;padding:7px 10px;margin-top:4px">
+        <div>
+          <div style="font-size:8.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px">Débit actuel</div>
+          <div style="display:flex;align-items:baseline;gap:3px">
+            <span style="font-size:20px;font-weight:700;color:var(--ink)">${realFlow.toFixed(1)}</span>
+            <span style="font-size:10px;color:#888">m³/s</span>
+          </div>
+        </div>
+        <a href="${cehqUrl}" target="_blank"
+           style="display:flex;flex-direction:column;align-items:center;gap:2px;text-decoration:none;background:var(--brand);color:#fff;padding:5px 10px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.04em;transition:background .15s"
+           onmouseover="this.style.background='var(--brand-2)'" onmouseout="this.style.background='var(--brand)'">
+          📈 Graphique<br><span style="font-size:8px;opacity:.75">CEHQ ↗</span>
+        </a>
+      </div>
+      <div style="font-size:8.5px;color:#bbb;margin-top:2px">${stNom ? stNom + distLabel : distLabel.slice(3)}</div>`;
+  } else {
+    realFlowHtml = `
+      <div style="font-size:10px;color:#aaa;margin-top:4px;display:flex;align-items:center;justify-content:space-between">
+        <span>Débit temps réel indisponible</span>
+        <a href="${cehqUrl}" target="_blank" style="color:var(--accent);font-weight:600;text-decoration:none;font-size:10px">📈 CEHQ ↗</a>
+      </div>`;
+  }
 
   el.innerHTML = `
     <div class="flow-header">Débit recommandé${nomEau ? ' — ' + nomEau : ''}</div>
@@ -1816,12 +1900,17 @@ async function loadFlow(attrs, lat, lng) {
       <span class="flow-val">${dmin || '?'}–${dmax || '?'}</span>
       <span class="flow-unit">m³/s</span>
     </div>
-    <div class="flow-bar-wrap"><div class="flow-bar" style="width:${pct}%"></div></div>
+    <div class="flow-bar-wrap">
+      <div class="flow-bar" style="width:${pct}%"></div>
+      ${realFlow != null ? `<div style="position:absolute;top:-5px;left:${pct}%;transform:translateX(-50%);width:2px;height:16px;background:var(--ink);border-radius:1px;opacity:.35"></div>` : ''}
+    </div>
     <div class="flow-range"><span>${dmin ?? 0} m³/s min</span><span>${dmax ?? '?'} m³/s max</span></div>
     <span class="flow-status ${statusClass}">${statusLabel}</span>
-    <div style="margin-top:8px;font-size:10px;color:#aaa;line-height:1.5">
-      Débit en temps réel : <a href="https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
-    </div>`;
+    ${realFlowHtml}`;
+
+  // Rendre la barre relative (position absolute du curseur)
+  const barWrap = el.querySelector('.flow-bar-wrap');
+  if (barWrap) barWrap.style.position = 'relative';
 }
 
 // ── Profil d'élévation (Open-Elevation API) ──────────────────────
