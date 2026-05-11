@@ -1797,7 +1797,7 @@ async function loadFlow(attrs, lat, lng) {
       <div class="flow-header">Conditions de débit</div>
       <div style="padding:8px 0;font-size:11px;color:#888;line-height:1.6">
         Aucune donnée de débit disponible pour ce parcours.<br>
-        <a href="https://www.cehq.gouv.qc.ca/hydrometrie/historique_donnees/default.asp" target="_blank" style="color:var(--accent)">Consulter le CEHQ →</a>
+        <a href="https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm" target="_blank" style="color:var(--accent)">Consulter le CEHQ →</a>
       </div>`;
     return;
   }
@@ -1820,7 +1820,7 @@ async function loadFlow(attrs, lat, lng) {
     <div class="flow-range"><span>${dmin ?? 0} m³/s min</span><span>${dmax ?? '?'} m³/s max</span></div>
     <span class="flow-status ${statusClass}">${statusLabel}</span>
     <div style="margin-top:8px;font-size:10px;color:#aaa;line-height:1.5">
-      Débit en temps réel : <a href="https://www.cehq.gouv.qc.ca/hydrometrie/historique_donnees/default.asp" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
+      Débit en temps réel : <a href="https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
     </div>`;
 }
 
