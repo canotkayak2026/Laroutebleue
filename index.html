@@ -442,10 +442,13 @@
       }
       #sidebar.closed {
         margin-left: 0 !important;
-        transform: translateY(calc(100% - 56px));
+        transform: translateY(calc(100% - 72px));
       }
 
       /* Handle drag visuel */
+      .sidebar-header {
+        padding-top: 22px !important;
+      }
       .sidebar-header::after {
         content: '';
         display: block;
@@ -475,10 +478,14 @@
 
       /* Contrôles carte repositionnés */
       #map-ctrl-extra { top: 12px; left: 12px; }
-      #basemap-switcher { bottom: calc(65vh - 30px); right: 10px; }
+      #basemap-switcher { bottom: 90px; right: 10px; transition: bottom 0.32s cubic-bezier(.4,0,.2,1); }
 
       /* Region hero un peu plus compact */
       .region-hero { height: 68px; }
+
+      /* Basemap remonte quand sidebar fermée */
+      #sidebar.closed ~ #map-container #basemap-switcher,
+      body.sidebar-closed #basemap-switcher { bottom: 24px; }
     }
 
     /* Drag handle barre visible */
@@ -2113,9 +2120,20 @@ restoreFromUrl();
 
 // ── Drag handle mobile ────────────────────────────────────────────
 (function() {
-  const handle = document.getElementById('sidebar-drag-handle');
-  const sidebar = document.getElementById('sidebar');
+  const handle  = document.getElementById('sidebar-drag-handle');
+  const sidebarEl = document.getElementById('sidebar');
+  const basemap = document.getElementById('basemap-switcher');
   if (!handle) return;
+
+  function syncBasemap() {
+    if (window.innerWidth > 768 || !basemap) return;
+    if (sidebarEl.classList.contains('closed')) {
+      basemap.style.bottom = '24px';
+    } else {
+      basemap.style.bottom = '90px';
+    }
+  }
+
   let startY = 0, startT = 0;
   handle.addEventListener('touchstart', e => {
     startY = e.touches[0].clientY; startT = Date.now();
@@ -2124,21 +2142,28 @@ restoreFromUrl();
     const dy = e.changedTouches[0].clientY - startY;
     const dt = Date.now() - startT;
     if (dt < 300) {
-      sidebar.classList.toggle('closed');
+      sidebarEl.classList.toggle('closed');
     } else if (dy > 60) {
-      sidebar.classList.add('closed');
+      sidebarEl.classList.add('closed');
     } else if (dy < -60) {
-      sidebar.classList.remove('closed');
+      sidebarEl.classList.remove('closed');
     }
+    setTimeout(syncBasemap, 350);
   }, { passive: true });
+
   // Tap sur le header aussi pour toggler sur mobile
   const header = document.querySelector('.sidebar-header');
   if (header) {
     header.addEventListener('touchend', e => {
-      if (e.target.closest('input')) return; // ne pas bloquer le champ de recherche
-      sidebar.classList.toggle('closed');
+      if (e.target.closest('input')) return;
+      sidebarEl.classList.toggle('closed');
+      setTimeout(syncBasemap, 350);
     }, { passive: true });
   }
+
+  // Sync initial + sur resize
+  syncBasemap();
+  window.addEventListener('resize', syncBasemap);
 })();
 
 // ── Géolocalisation + Parcours à proximité ────────────────────────
@@ -2204,7 +2229,7 @@ function buildProximityList() {
       const f = featMap[oid];
       if (f && arcgisView) {
         arcgisView.goTo({ center: [f.geometry.x, f.geometry.y], zoom: 13 }, { duration: 600 });
-        setTimeout(() => showPopup(f), 700);
+        setTimeout(() => showPopup(f.attributes, f.geometry.y, f.geometry.x), 700);
       }
     });
   });
@@ -2247,7 +2272,6 @@ geoBtn.addEventListener('click', () => {
   }
 
   if (geoBtn.classList.contains('located')) {
-    // Désactiver
     if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
     geoBtn.classList.remove('located','locating');
     userDot.style.display = 'none';
@@ -2266,27 +2290,42 @@ geoBtn.addEventListener('click', () => {
     userLng = pos.coords.longitude;
     geoBtn.classList.remove('locating');
     geoBtn.classList.add('located');
+
     if (!arcgisView) return;
     updateUserDot();
 
     if (firstFix) {
       firstFix = false;
       arcgisView.goTo({ center: [userLng, userLat], zoom: 10 }, { duration: 800 });
-      // Afficher la section proximité et cacher la liste normale
+
+      // Afficher la section proximité
       document.getElementById('sidebar-list').style.display = 'none';
       proxSection.classList.add('visible');
-      // Sur mobile, ouvrir la sidebar
       document.getElementById('sidebar').classList.remove('closed');
-      buildProximityList();
+
+      // Si les features sont déjà chargées, construire la liste immédiatement
+      // Sinon, buildProximityList sera appelé par arcgisView.when quand elles arrivent
+      if (allFeatures.length > 0) {
+        buildProximityList();
+      } else {
+        proxList.innerHTML = `<div class="empty-state">
+          <div class="spinner-sm" style="margin:0 auto"></div>
+          <div class="empty-state-sub" style="margin-top:8px">Chargement des parcours…</div>
+        </div>`;
+      }
     } else {
       updateUserDot();
       buildProximityList();
     }
   }, err => {
     geoBtn.classList.remove('locating');
-    const msgs = { 1:'Accès à la localisation refusé.', 2:'Position indisponible.', 3:'Délai dépassé.' };
+    const msgs = {
+      1: 'Accès à la localisation refusé. Vérifie les permissions du navigateur.',
+      2: 'Position indisponible.',
+      3: 'Délai dépassé — réessaie.'
+    };
     showToast(msgs[err.code] || 'Erreur de géolocalisation.');
-  }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 });
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
 });
 
 require([
@@ -2389,6 +2428,11 @@ require([
     allFeatures.forEach(f => { featMap[String(f.attributes.OBJECTID)] = f; });
 
     buildSidebar(allFeatures);
+
+    // Si la géoloc était déjà active avant la fin du chargement, construire la liste
+    if (userLat !== null && proxSection.classList.contains('visible')) {
+      buildProximityList();
+    }
 
     // Restaurer l'état depuis l'URL
     const urlParams = new URLSearchParams(location.search);
