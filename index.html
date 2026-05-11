@@ -864,9 +864,9 @@ const TRAJET_LBL  = { ALL:'Aller simple', ALR:'Aller-retour', BOU:'Boucle' };
 
 // Icônes officielles La route bleue (URLs relatives)
 const MILIEU_ICO = {
-  EC:  'icons/Eau_calme.svg',
-  EV:  'icons/Eau_vive.svg',
-  MAR: 'icons/Marin.svg'
+  EC:  'Eau calme.svg',
+  EV:  'Eau vive.svg',
+  MAR: 'Marin.svg'
 };
 const MILIEU_LBL  = { EC:'Eau calme', EV:'Eau vive', MAR:'Marin/Fleuve' };
 
@@ -2147,8 +2147,10 @@ restoreFromUrl();
       basemap.style.bottom = (SIDEBAR_H + 12) + 'px';
       document.body.classList.remove('sidebar-closed');
     }
-    // Redimensionner la carte ArcGIS pour qu'elle occupe le bon espace
-    if (arcgisView) setTimeout(() => arcgisView.resize(), 350);
+    // Attendre la fin de la transition CSS (320ms) puis forcer le resize ArcGIS
+    setTimeout(() => {
+      if (arcgisView) arcgisView.resize();
+    }, 380);
   }
 
   // ── Geste sur le handle ──
@@ -2166,7 +2168,7 @@ restoreFromUrl();
     } else if (dy < -50) {
       sidebarEl.classList.remove('closed');
     }
-    setTimeout(syncBasemap, 350);
+    syncBasemap();
   }, { passive: true });
 
   // ── Tap sur le sidebar-header pour toggler ──
@@ -2175,7 +2177,7 @@ restoreFromUrl();
     header.addEventListener('touchend', e => {
       if (e.target.closest('input')) return;
       sidebarEl.classList.toggle('closed');
-      setTimeout(syncBasemap, 350);
+      syncBasemap();
     }, { passive: true });
   }
 
@@ -2190,16 +2192,13 @@ restoreFromUrl();
       if (window.innerWidth > 768) return;
       const dy = e.changedTouches[0].clientY - mapTouchStartY;
       const dx = e.changedTouches[0].clientX - mapTouchStartX;
-      // Swipe vertical dominant (pas horizontal = pas de rotation carte)
       if (Math.abs(dy) > Math.abs(dx) + 20) {
         if (dy < -60 && sidebarEl.classList.contains('closed')) {
-          // Swipe vers le haut = ouvrir sidebar
           sidebarEl.classList.remove('closed');
-          setTimeout(syncBasemap, 350);
+          syncBasemap();
         } else if (dy > 60 && !sidebarEl.classList.contains('closed')) {
-          // Swipe vers le bas = fermer sidebar
           sidebarEl.classList.add('closed');
-          setTimeout(syncBasemap, 350);
+          syncBasemap();
         }
       }
     }, { passive: true });
