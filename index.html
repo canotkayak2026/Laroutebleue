@@ -126,7 +126,7 @@
     .region-name { font-family:'Montserrat',Arial,sans-serif; font-size:12px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:.12em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 4px rgba(0,0,0,.4); }
     .region-milieux { display:flex; gap:5px; margin-top:5px; flex-wrap:wrap; }
     .region-milieu-pill { display:flex; align-items:center; gap:4px; background:rgba(255,255,255,.15); border-radius:20px; padding:2px 8px 2px 5px; backdrop-filter:blur(4px); }
-    .region-milieu-pill img { width:14px; height:14px; object-fit:contain; border-radius:50%; background:#fff; flex-shrink:0; }
+    .region-milieu-pill img { width:14px; height:14px; object-fit:contain; border-radius:50%; filter:brightness(0) invert(1); flex-shrink:0; }
     .region-milieu-pill span { font-family:'Montserrat',Arial,sans-serif; font-size:9px; font-weight:600; color:#fff; letter-spacing:.04em; }
     .region-hero-right { display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0; }
     .region-count { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); color:#fff; font-family:'Montserrat',Arial,sans-serif; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
@@ -142,8 +142,8 @@
     .parcours-item.active { background:var(--foam); }
     .parcours-item.active::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--brand); border-radius:0 2px 2px 0; }
 
-    .parcours-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px; transition: transform 0.15s ease, box-shadow 0.15s ease; overflow:hidden; background:#fff; font-size:15px; }
-    .parcours-icon img { width:30px; height:30px; object-fit:contain; display:block; }
+    .parcours-icon { width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px; transition: transform 0.15s ease, box-shadow 0.15s ease; overflow:hidden; background:transparent; font-size:15px; }
+    .parcours-icon img { width:32px; height:32px; object-fit:contain; display:block; }
     .parcours-icon svg { width:36px; height:36px; border-radius:8px; display:block; flex-shrink:0; }
     .parcours-item.active .parcours-icon,
     .parcours-item:active .parcours-icon { transform: scale(1.18); box-shadow: 0 0 0 2.5px var(--accent), 0 0 0 4px rgba(0,158,194,0.22); border-radius: 50%; }
@@ -154,9 +154,9 @@
       100% { transform: scale(1.13); box-shadow: 0 0 0 0 rgba(0,158,194,0); border-radius:50%; }
     }
     .parcours-item.active .parcours-icon { animation: icon-pulse 0.45s ease-out forwards; }
-    .parcours-icon.EC  { background:#fff; }
-    .parcours-icon.EV  { background:#fff; }
-    .parcours-icon.MAR { background:#fff; }
+    .parcours-icon.EC  { background:transparent; }
+    .parcours-icon.EV  { background:transparent; }
+    .parcours-icon.MAR { background:transparent; }
     .parcours-icon.DEF { background:var(--foam); }
 
     .parcours-info { flex:1; min-width:0; }
@@ -1866,13 +1866,22 @@ async function loadFlow(attrs, lat, lng) {
 
   // ── 5. Calcul barre et statut ───────────────────────────────────
   const flowVal = (realValue != null && realUnit === 'm³/s') ? realValue : null;
-  const scale   = (dmax || 100) * 2;
-  const pctMin  = Math.round((dmin / scale) * 100);
-  const pctMax  = Math.round((dmax / scale) * 100);
+
+  // Échelle : la plage recommandée occupe la zone 15%→85% de la barre.
+  // Ça laisse 15% de buffer à gauche (débit trop faible) et 15% à droite (débit trop élevé).
+  // scaleMin = valeur à 0%, scaleMax = valeur à 100%
+  const rangeSpan  = (dmax - dmin) || dmax || 100;
+  const bufferSize = rangeSpan / (0.85 - 0.15); // taille totale de l'échelle
+  const scaleMin   = dmin - bufferSize * 0.15;   // valeur à 0% (peut être négatif, on clamp à 0)
+  const scaleMax   = scaleMin + bufferSize;       // valeur à 100%
+  const toBarPct   = v => Math.min(99, Math.max(1, ((v - scaleMin) / (scaleMax - scaleMin)) * 100));
+
+  const pctMin = toBarPct(dmin);  // toujours ~15%
+  const pctMax = toBarPct(dmax);  // toujours ~85%
   let pct = 50;
   let statusClass = 'ok', statusLabel = '✓ Conditions favorables';
   if (flowVal != null) {
-    pct = Math.min(98, Math.max(2, (flowVal / scale) * 100));
+    pct = toBarPct(flowVal);
     if      (flowVal < dmin) { statusClass = 'low';  statusLabel = '⚠ Débit trop faible'; }
     else if (flowVal > dmax) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
   } else {
@@ -1915,14 +1924,16 @@ async function loadFlow(attrs, lat, lng) {
     </div>
     <div class="flow-bar-wrap" style="position:relative;margin-bottom:4px">
       <!-- Zone verte = plage recommandée -->
-      <div style="position:absolute;left:${pctMin}%;width:${pctMax-pctMin}%;height:100%;background:rgba(45,158,107,.25);border-radius:2px;top:0"></div>
-      <!-- Barre débit actuel -->
-      ${flowVal != null ? `<div class="flow-bar" style="width:${pct}%"></div>` : `<div class="flow-bar" style="width:50%;opacity:.3"></div>`}
+      <div style="position:absolute;left:${pctMin}%;width:${pctMax-pctMin}%;height:100%;background:rgba(45,158,107,.3);border-radius:2px;top:0"></div>
+      <!-- Barre débit actuel — couleur selon statut -->
+      ${flowVal != null
+        ? `<div class="flow-bar" style="width:${pct}%;background:${statusClass==='low'?'#e6a817':statusClass==='high'?'#d94040':'linear-gradient(90deg,var(--accent),var(--brand))'}"></div>`
+        : `<div class="flow-bar" style="width:50%;opacity:.2"></div>`}
       <!-- Curseur débit actuel -->
-      ${flowVal != null ? `<div style="position:absolute;top:-5px;left:${pct}%;transform:translateX(-50%);width:3px;height:16px;background:var(--ink);border-radius:2px;opacity:.6"></div>` : ''}
+      ${flowVal != null ? `<div style="position:absolute;top:-6px;left:${pct}%;transform:translateX(-50%);width:3px;height:18px;background:${statusClass==='low'?'#e6a817':statusClass==='high'?'#d94040':'var(--ink)'};border-radius:2px;opacity:.8"></div>` : ''}
       <!-- Marqueurs dmin / dmax -->
-      <div style="position:absolute;top:-3px;left:${pctMin}%;transform:translateX(-50%);width:1px;height:12px;background:var(--green);opacity:.7"></div>
-      <div style="position:absolute;top:-3px;left:${pctMax}%;transform:translateX(-50%);width:1px;height:12px;background:var(--green);opacity:.7"></div>
+      <div style="position:absolute;top:-4px;left:${pctMin}%;transform:translateX(-50%);width:2px;height:14px;background:var(--green);border-radius:1px;opacity:.8"></div>
+      <div style="position:absolute;top:-4px;left:${pctMax}%;transform:translateX(-50%);width:2px;height:14px;background:var(--green);border-radius:1px;opacity:.8"></div>
     </div>
     <div class="flow-range">
       <span>${dmin ?? 0} m³/s min</span>
