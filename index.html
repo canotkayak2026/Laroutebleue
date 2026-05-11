@@ -1640,12 +1640,23 @@ document.querySelectorAll('.basemap-opt').forEach(opt => {
   });
 });
 
-// Bouton maison — retour vue initiale + ferme popup
+// Bouton maison — retour vue initiale + ferme popup + ferme onglets + déselectionne
 document.getElementById('home-btn').addEventListener('click', () => {
   closePopup();
   if (!arcgisView) return;
   if (initialExtent) arcgisView.goTo(initialExtent, { duration: 700 });
   else arcgisView.goTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }, { duration: 700 });
+
+  // Fermer tous les onglets de région
+  sidebarList.querySelectorAll('.region-items').forEach(d => d.classList.add('hidden'));
+  sidebarList.querySelectorAll('.region-header').forEach(h => h.classList.add('collapsed'));
+
+  // Retirer la sélection active
+  if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
+
+  // Retirer le surlignage de section
+  if (highlightHandle) { highlightHandle.remove(); highlightHandle = null; }
+  if (typeof highlightGraphicsLayer !== 'undefined') highlightGraphicsLayer.removeAll();
 });
 
 // Boutons zoom custom
