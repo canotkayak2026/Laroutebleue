@@ -327,7 +327,7 @@
     .popup-tabs { display:flex; border-bottom:1px solid #eee; background:#fff; flex-shrink:0; }
     .popup-tab  { flex:1; padding:7px 4px; font-size:10px; font-weight:600; color:#999; text-align:center; cursor:pointer; border:none; background:none; letter-spacing:.04em; transition:color .15s; border-bottom:2px solid transparent; margin-bottom:-1px; }
     .popup-tab.active { color:var(--brand); border-bottom-color:var(--accent); }
-    .popup-tab-pane { display:none; }
+    .popup-tab-pane { display:none; overflow-y:auto; max-height:260px; }
     .popup-tab-pane.active { display:block; }
 
     /* Météo */
@@ -347,7 +347,7 @@
     .flow-header   { font-size:9px; font-weight:700; color:var(--brand); text-transform:uppercase; letter-spacing:.1em; }
     .flow-val      { font-size:24px; font-weight:700; color:var(--ink); }
     .flow-unit     { font-size:11px; color:#888; margin-left:4px; }
-    .flow-bar-wrap { height:6px; background:#e8f0fa; border-radius:3px; overflow:hidden; }
+    .flow-bar-wrap { height:6px; background:#e8f0fa; border-radius:3px; overflow:visible; position:relative; }
     .flow-bar      { height:100%; border-radius:3px; background:linear-gradient(90deg,var(--accent),var(--brand)); transition:width .6s ease; }
     .flow-range    { display:flex; justify-content:space-between; font-size:9px; color:#bbb; }
     .flow-status   { display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:600; padding:3px 8px; border-radius:5px; }
@@ -1731,12 +1731,14 @@ async function fetchWeather(lat, lng) {
 async function loadWeather(lat, lng) {
   const el = document.getElementById('weather-content');
   el.innerHTML = '<div class="weather-loading">Chargement météo…</div>';
-  // MétéoMédia : URL basée sur la municipalité du parcours
-  const munic = (lastPopupAttrs && lastPopupAttrs.MUNIC) ? lastPopupAttrs.MUNIC : '';
+  // MétéoMédia : prendre la première municipalité du champ MUNIC
+  const munic = (lastPopupAttrs && lastPopupAttrs.MUNIC)
+    ? lastPopupAttrs.MUNIC.split(/[,&]/)[0].trim()
+    : '';
   const municSlug = munic
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // enlever accents
-    .replace(/['']/g, '-')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/['\u2019]/g, '')
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '');
   const meteoMediaUrl = municSlug
@@ -1864,15 +1866,18 @@ async function loadFlow(attrs, lat, lng) {
 
   // ── 5. Calcul barre et statut ───────────────────────────────────
   const flowVal = (realValue != null && realUnit === 'm³/s') ? realValue : null;
+  const scale   = (dmax || 100) * 2;
+  const pctMin  = Math.round((dmin / scale) * 100);
+  const pctMax  = Math.round((dmax / scale) * 100);
   let pct = 50;
   let statusClass = 'ok', statusLabel = '✓ Conditions favorables';
   if (flowVal != null) {
-    pct = Math.min(100, Math.max(2, (flowVal / (dmax * 1.5 || 100)) * 100));
+    pct = Math.min(98, Math.max(2, (flowVal / scale) * 100));
     if      (flowVal < dmin) { statusClass = 'low';  statusLabel = '⚠ Débit trop faible'; }
     else if (flowVal > dmax) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
   } else {
-    if      (dmin > 80) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
-    else if (dmax < 5)  { statusClass = 'low';  statusLabel = '⚠ Débit faible'; }
+    if (dmin > 80) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
+    else if (dmax < 5) { statusClass = 'low'; statusLabel = '⚠ Débit faible'; }
   }
 
   // ── 6. Bloc valeur temps réel ───────────────────────────────────
@@ -1908,11 +1913,16 @@ async function loadFlow(attrs, lat, lng) {
       <span class="flow-val">${dmin || '?'}–${dmax || '?'}</span>
       <span class="flow-unit">m³/s</span>
     </div>
-    <div class="flow-bar-wrap" style="position:relative">
-      <div class="flow-bar" style="width:${pct}%"></div>
-      ${flowVal != null ? `
-        <div style="position:absolute;top:-4px;left:${pct}%;transform:translateX(-50%);
-                    width:3px;height:14px;background:var(--ink);border-radius:2px;opacity:.4"></div>` : ''}
+    <div class="flow-bar-wrap" style="position:relative;margin-bottom:4px">
+      <!-- Zone verte = plage recommandée -->
+      <div style="position:absolute;left:${pctMin}%;width:${pctMax-pctMin}%;height:100%;background:rgba(45,158,107,.25);border-radius:2px;top:0"></div>
+      <!-- Barre débit actuel -->
+      ${flowVal != null ? `<div class="flow-bar" style="width:${pct}%"></div>` : `<div class="flow-bar" style="width:50%;opacity:.3"></div>`}
+      <!-- Curseur débit actuel -->
+      ${flowVal != null ? `<div style="position:absolute;top:-5px;left:${pct}%;transform:translateX(-50%);width:3px;height:16px;background:var(--ink);border-radius:2px;opacity:.6"></div>` : ''}
+      <!-- Marqueurs dmin / dmax -->
+      <div style="position:absolute;top:-3px;left:${pctMin}%;transform:translateX(-50%);width:1px;height:12px;background:var(--green);opacity:.7"></div>
+      <div style="position:absolute;top:-3px;left:${pctMax}%;transform:translateX(-50%);width:1px;height:12px;background:var(--green);opacity:.7"></div>
     </div>
     <div class="flow-range">
       <span>${dmin ?? 0} m³/s min</span>
@@ -2002,14 +2012,22 @@ async function loadElevation(attrs, lat, lng) {
     }
     elevLocations = locations;
 
-    // ── 2. Requête élévation ──────────────────────────────────────
+    // ── 2. Requête élévation via ArcGIS ElevationLayer (Dojo require, pas de CORS) ──
     el.innerHTML = '<div class="elev-loading">Calcul du profil d\'élévation…</div>';
-    const res  = await fetch('https://api.open-elevation.com/api/v1/lookup', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ locations })
+    const elevs = await new Promise((resolve, reject) => {
+      require(['esri/layers/ElevationLayer', 'esri/geometry/Polyline'], (ElevationLayer, Polyline) => {
+        const elevLayer = new ElevationLayer({
+          url: 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+        });
+        const polyline = new Polyline({
+          paths: [locations.map(p => [p.longitude, p.latitude])],
+          spatialReference: { wkid: 4326 }
+        });
+        elevLayer.queryElevation(polyline, { demResolution: 'finest-contiguous', noDataValue: 0 })
+          .then(profile => resolve(profile.geometry.paths[0].map(pt => pt[2] ?? 0)))
+          .catch(reject);
+      });
     });
-    const data = await res.json();
-    const elevs = data.results.map(r => r.elevation);
     const minE  = Math.min(...elevs), maxE = Math.max(...elevs);
     const gain  = elevs.reduce((a,e,i) => i>0 && e>elevs[i-1] ? a+(e-elevs[i-1]) : a, 0);
     const loss  = elevs.reduce((a,e,i) => i>0 && e<elevs[i-1] ? a+(elevs[i-1]-e) : a, 0);
@@ -2045,7 +2063,7 @@ async function loadElevation(attrs, lat, lng) {
       return d;
     }
     const linePath  = smoothPath(ptCoords);
-    const areaPath  = linePath + ` L ${ptCoords[pts-1].x} ${H-pad.b} L ${pad.l} ${H-pad.b} Z`;
+    const areaPath  = linePath + ` L ${ptCoords[n-1].x} ${H-pad.b} L ${pad.l} ${H-pad.b} Z`;
 
     // Grille horizontale légère
     const gridLines = [0, 0.5, 1].map(t => {
