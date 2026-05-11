@@ -1647,16 +1647,21 @@ document.getElementById('home-btn').addEventListener('click', () => {
   if (initialExtent) arcgisView.goTo(initialExtent, { duration: 700 });
   else arcgisView.goTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }, { duration: 700 });
 
-  // Fermer tous les onglets de région
+  // Fermer tous les onglets de région + désélectionner
   sidebarList.querySelectorAll('.region-items').forEach(d => d.classList.add('hidden'));
-  sidebarList.querySelectorAll('.region-header').forEach(h => h.classList.add('collapsed'));
+  sidebarList.querySelectorAll('.region-header').forEach(h => { h.classList.add('collapsed'); h.classList.remove('region-selected'); });
+  if (activeRegionHeader) { activeRegionHeader.classList.remove('region-selected'); activeRegionHeader = null; }
+  clearLayerFilter();
 
-  // Retirer la sélection active
+  // Retirer la sélection de parcours active
   if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
 
   // Retirer le surlignage de section
   if (highlightHandle) { highlightHandle.remove(); highlightHandle = null; }
-  if (typeof highlightGraphicsLayer !== 'undefined') highlightGraphicsLayer.removeAll();
+  if (highlightGraphicsLayer) highlightGraphicsLayer.removeAll();
+
+  // Remettre le compteur
+  sidebarCount.textContent = `${allFeatures.length} parcours`;
 });
 
 // Boutons zoom custom
