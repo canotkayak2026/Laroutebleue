@@ -339,9 +339,26 @@
     @keyframes loc-pulse { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2.8);opacity:0} }
 
     /* ══ POPUP ONGLETS (météo / élévation / débit) ════════════════ */
-    .popup-tabs { display:flex; border-bottom:1px solid #eee; background:#fff; flex-shrink:0; }
-    .popup-tab  { flex:1; padding:7px 4px; font-size:10px; font-weight:600; color:#999; text-align:center; cursor:pointer; border:none; background:none; letter-spacing:.04em; transition:color .15s; border-bottom:2px solid transparent; margin-bottom:-1px; }
-    .popup-tab.active { color:var(--brand); border-bottom-color:var(--accent); }
+    .popup-tabs {
+      display:flex; gap:4px; padding:8px 10px 0; background:#fff;
+      flex-shrink:0; border-bottom: 1px solid #eef2f8;
+    }
+    .popup-tab {
+      flex:1; padding:7px 4px 8px; font-size:10px; font-weight:700;
+      color:#aab; text-align:center; cursor:pointer; border:none;
+      background: none; letter-spacing:.03em;
+      border-radius: 8px 8px 0 0;
+      transition: color .15s, background .15s;
+      border-bottom: 2.5px solid transparent;
+      margin-bottom: -1px;
+      font-family:'Montserrat',Arial,sans-serif;
+    }
+    .popup-tab:hover { color: var(--brand); background: var(--mist); }
+    .popup-tab.active {
+      color: var(--brand);
+      border-bottom-color: var(--accent);
+      background: var(--foam);
+    }
     .popup-tab-pane { display:none; overflow-y:auto; max-height:260px; }
     .popup-tab-pane.active { display:block; }
 
@@ -521,10 +538,16 @@
 
       /* ── Basemap bas-gauche sur mobile ── */
       #basemap-switcher {
-        bottom: 3vh !important; left: 4% !important;
+        position: fixed !important;
+        bottom: 3vh !important;
+        left: 4vw !important;
         right: auto !important;
+        align-items: flex-start !important;
       }
-      #basemap-options { align-items: flex-start; }
+      #basemap-options {
+        align-items: flex-start;
+        transform-origin: bottom left !important;
+      }
 
       /* ── Sheet filtres — déploie depuis le haut ── */
       #mobile-filter-sheet {
@@ -581,23 +604,38 @@
       }
       #custom-popup.visible { transform: translateY(0) !important; }
 
-      /* Réordonner : onglets d'abord, puis header, puis photo, puis body */
+      /* ── Onglets mobile — pill style sur fond brand ── */
       #popup-tabs-bar {
-        order: -3;
-        border-radius: 20px 20px 0 0;
         background: var(--brand);
-        border-bottom: none;
-        padding: 12px 12px 0;
+        border-bottom: none !important;
+        border-radius: 20px 20px 0 0;
+        padding: 14px 10px 6px;
+        gap: 5px;
       }
-      .popup-tab { color: rgba(255,255,255,.55) !important; border-bottom-color: transparent !important; }
-      .popup-tab.active { color: #fff !important; border-bottom-color: var(--accent) !important; }
-
-      /* Handle pill au-dessus des onglets */
+      /* Handle drag pill au-dessus */
       #popup-tabs-bar::before {
         content: '';
         display: block; width: 36px; height: 4px;
-        background: rgba(255,255,255,.3); border-radius: 2px;
-        margin: 0 auto 10px;
+        background: rgba(255,255,255,.28); border-radius: 3px;
+        margin: 0 auto 12px;
+      }
+      .popup-tab {
+        flex: 1;
+        background: rgba(255,255,255,.1) !important;
+        border-radius: 10px !important;
+        border-bottom: none !important;
+        color: rgba(255,255,255,.55) !important;
+        font-size: 9.5px !important;
+        padding: 7px 3px !important;
+        letter-spacing: .02em !important;
+        margin-bottom: 0 !important;
+        transition: background .15s, color .15s !important;
+      }
+      .popup-tab:hover { background: rgba(255,255,255,.18) !important; }
+      .popup-tab.active {
+        background: rgba(255,255,255,.22) !important;
+        color: #fff !important;
+        box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35) !important;
       }
 
       .popup-header { order: -2; }
