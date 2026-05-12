@@ -356,6 +356,32 @@
     .flow-status.high { background:#ffeaea; color:#b03030; }
     .flow-loading  { padding:24px; text-align:center; color:#bbb; font-size:12px; }
 
+    /* Marée */
+    .tide-widget   { padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+    .tide-header   { font-size:9px; font-weight:700; color:var(--brand); text-transform:uppercase; letter-spacing:.1em; }
+    .tide-station  { font-size:10px; color:#888; }
+    .tide-now      { display:flex; align-items:baseline; gap:6px; margin:2px 0; }
+    .tide-now-val  { font-size:28px; font-weight:700; color:var(--ink); line-height:1; }
+    .tide-now-unit { font-size:11px; color:#888; }
+    .tide-now-lbl  { font-size:10px; color:#888; margin-top:2px; }
+    .tide-phase    { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 10px; border-radius:6px; }
+    .tide-phase.rising  { background:#e8f5ee; color:var(--green); }
+    .tide-phase.falling { background:#e8f0fb; color:var(--brand); }
+    .tide-phase.high    { background:#fef3ee; color:#c05b38; }
+    .tide-phase.low     { background:#f0f8ff; color:var(--accent); }
+    /* Mini-graphique SVG marée */
+    .tide-chart-wrap { width:100%; height:72px; position:relative; cursor:default; }
+    .tide-chart      { width:100%; height:100%; display:block; overflow:visible; }
+    /* Table des prochaines marées */
+    .tide-table      { width:100%; border-collapse:collapse; font-size:10px; }
+    .tide-table th   { font-size:8px; font-weight:700; color:#aaa; text-transform:uppercase; letter-spacing:.07em; padding:3px 4px; border-bottom:1px solid #eee; text-align:left; }
+    .tide-table td   { padding:4px 4px; border-bottom:1px solid #f5f5f5; color:var(--ink); vertical-align:middle; }
+    .tide-table tr:last-child td { border-bottom:none; }
+    .tide-badge      { display:inline-block; font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px; }
+    .tide-badge.HH   { background:#fef3ee; color:#c05b38; }
+    .tide-badge.BM   { background:#e8f4fb; color:var(--accent); }
+    .tide-loading    { padding:24px; text-align:center; color:#bbb; font-size:12px; }
+
     /* Profil d'élévation */
     .elev-widget { padding:12px 14px; }
     .elev-chart-wrap { position:relative; width:100%; height:90px; cursor:crosshair; user-select:none; }
@@ -910,8 +936,16 @@ const OUT_FIELDS = [
   'NIV_DIFFI','NIV_CLASS_GEN','TYPE_MILIEUX','TYPE_ZONE',
   'ETAT_SECTION','TARIF','LOCAT','NAVETT','SERV_GUID',
   'URL_FICHE_RB','NO_REG_TOURST','NOM_PLAN_EAU','MUNIC',
-  'DEBIT_MIN','DEBIT_MAX'
+  'DEBIT_MIN','DEBIT_MAX',
+  'TYPE_COURS_EAU','NO_STATION_CEHQ'
 ].join(',');
+
+// Valeurs du domaine TYPE_COURS_EAU considérées comme milieu marin (marée)
+const TIDAL_ZONE_CODES = ['MER','ESTU','EST','MAR','FLEU'];
+function isTidalSection(attrs) {
+  const z = (attrs.TYPE_COURS_EAU || '').toUpperCase().trim();
+  return TIDAL_ZONE_CODES.some(c => z.startsWith(c));
+}
 
 let allFeatures = [], photos = [], photoIndex = 0;
 let currentOID = null, activeItem = null, arcgisView = null, arcgisLayer = null, sectionLayer = null;
@@ -1355,6 +1389,12 @@ async function showPopup(attrs, lat, lng) {
   document.getElementById('flow-content').innerHTML = '<div class="flow-loading">Chargement débit…</div>';
   document.getElementById('elev-content').innerHTML = '<div class="elev-loading">Calcul du profil…</div>';
 
+  // Adapter le label de l'onglet Débit / Marée selon le type de cours d'eau
+  const tabDebit = document.querySelector('.popup-tab[data-tab="debit"]');
+  if (tabDebit) {
+    tabDebit.textContent = isTidalSection(attrs) ? '🌊 Marée' : '💧 Débit';
+  }
+
   // En-tête
   elRoute.textContent = attrs.NOM_RTE_BLEUE || '';
   elTitle.textContent = attrs.NOM || attrs.NOM_RTE_BLEUE || 'Parcours sans nom';
@@ -1797,6 +1837,251 @@ async function loadWeather(lat, lng) {
          style="display:flex;align-items:center;gap:6px;margin:8px 14px;padding:7px 10px;background:#f0f7ff;border-radius:8px;text-decoration:none;color:var(--brand);font-size:11px;font-weight:600;">
         Voir sur MétéoMédia ↗
       </a>`;
+  }
+}
+
+// ── Marée (API IWLS SINE — Pêches et Océans Canada) ──────────────
+// Référence : https://api-sine.dfo-mpo.gc.ca/swagger-ui/index.html
+// Le code de station (ex. "01960") est stocké dans NO_STATION_CEHQ et
+// correspond directement à l'identifiant utilisé sur marees.gc.ca.
+// Endpoints utilisés :
+//   GET /api/v1/stations/{id}              → métadonnées station
+//   GET /api/v1/stations/{id}/data         → séries temporelles
+//     time-series-code=wlp-hilo  → prédictions HH/BM (7 jours)
+//     time-series-code=wlp       → prédictions continues (résolution horaire, 7 jours max)
+//     time-series-code=wlo       → observations temps réel
+const IWLS_BASE = 'https://api-sine.dfo-mpo.gc.ca/api/v1';
+
+async function loadTides(attrs, lat, lng) {
+  const el       = document.getElementById('flow-content');
+  const stCode   = (attrs.NO_STATION_CEHQ || '').trim();   // ex. "01960"
+  const nomEau   = attrs.NOM_PLAN_EAU || attrs.NOM || '';
+  const mareeUrl = stCode
+    ? `https://marees.gc.ca/fr/stations/${stCode}`
+    : 'https://marees.gc.ca/fr/stations';
+
+  el.innerHTML = `<div class="tide-loading">Chargement des données de marée…</div>`;
+
+  if (!stCode) {
+    el.innerHTML = `
+      <div class="tide-widget">
+        <div class="tide-header">Marée</div>
+        <div style="color:#aaa;font-size:11px;padding:8px 0">
+          Aucun numéro de station de marnage associé à ce parcours.<br>
+          <a href="${mareeUrl}" target="_blank" rel="noopener" style="color:var(--accent)">
+            Consulter Marées Canada ↗</a>
+        </div>
+      </div>`;
+    return;
+  }
+
+  try {
+    const now    = new Date();
+    const tMinus = new Date(now.getTime() - 2 * 3600000);   // -2 h pour obs
+    const tPlus  = new Date(now.getTime() + 7 * 24 * 3600000); // +7 j pour preds
+    const fmt    = d => d.toISOString().slice(0, 19) + 'Z';
+
+    // ── 1. Métadonnées de la station ────────────────────────────────
+    const metaRes = await fetch(`${IWLS_BASE}/stations/${stCode}`);
+    if (!metaRes.ok) throw new Error(`Station ${stCode} introuvable (HTTP ${metaRes.status})`);
+    const meta  = await metaRes.json();
+    const stNom = meta.officialName || meta.name || stCode;
+
+    // ── 2. Requêtes parallèles : HH/BM + horaires + observations ───
+    const [hiloRes, hourlyRes, obsRes] = await Promise.all([
+      // Prédictions HH/BM — 7 jours
+      fetch(`${IWLS_BASE}/stations/${stCode}/data?time-series-code=wlp-hilo&from=${fmt(now)}&to=${fmt(tPlus)}`),
+      // Prédictions horaires — 48 h pour le graphique
+      fetch(`${IWLS_BASE}/stations/${stCode}/data?time-series-code=wlp&from=${fmt(now)}&to=${fmt(new Date(now.getTime() + 48*3600000))}&resolution=ONE_HOUR`),
+      // Observations récentes — 2 h
+      fetch(`${IWLS_BASE}/stations/${stCode}/data?time-series-code=wlo&from=${fmt(tMinus)}&to=${fmt(now)}&resolution=ONE_MINUTE`).catch(() => null)
+    ]);
+
+    // HH/BM
+    const hiloData   = hiloRes.ok   ? await hiloRes.json()   : [];
+    // Prédictions horaires pour le graphique
+    const hourlyData = hourlyRes.ok ? await hourlyRes.json() : [];
+    // Observations
+    let currentLevel = null, currentTime = null;
+    if (obsRes && obsRes.ok) {
+      const obsData = await obsRes.json();
+      if (obsData.length) {
+        // Prendre la dernière valeur non-nulle
+        for (let i = obsData.length - 1; i >= 0; i--) {
+          const v = parseFloat(obsData[i].value);
+          if (!isNaN(v)) {
+            currentLevel = v;
+            currentTime  = new Date(obsData[i].eventDate);
+            break;
+          }
+        }
+      }
+    }
+
+    // ── 3. Extraire HH/BM (format wlp-hilo : {eventDate, value, phenomenon}) ─
+    // phenomenon : "highWater" | "lowWater"
+    const extrema = hiloData
+      .map(d => ({
+        type  : (d.phenomenon === 'highWater' || d.value === Math.max(...hiloData.map(x => parseFloat(x.value)))) ? 'HH' : 'BM',
+        // L'API SINE donne phenomenon directement
+        ph    : d.phenomenon,
+        value : parseFloat(d.value),
+        date  : new Date(d.eventDate)
+      }))
+      .map(d => ({
+        ...d,
+        type: d.ph === 'highWater' ? 'HH' : 'BM'
+      }))
+      .filter(d => !isNaN(d.value) && d.date > new Date(now.getTime() - 3600000))
+      .sort((a, b) => a.date - b.date);
+
+    // ── 4. Phase actuelle (montant / descendant / étale) ────────────
+    let phaseLabel = '—', phaseCls = '';
+    // Trouver la prochaine et la précédente marée par rapport à maintenant
+    const nextEx = extrema.find(e => e.date > now);
+    const prevEx = extrema.slice().reverse().find(e => e.date <= now);
+    if (nextEx) {
+      if (nextEx.type === 'HH') { phaseLabel = '↑ Montante';  phaseCls = 'rising'; }
+      else                      { phaseLabel = '↓ Descendante'; phaseCls = 'falling'; }
+    } else if (prevEx) {
+      phaseLabel = '≈ Étale'; phaseCls = 'high';
+    }
+
+    // ── 5. Mini-graphique SVG 48 h ─────────────────────────────────
+    const W = 290, H = 62, pL = 4, pR = 4, pT = 8, pB = 4;
+    const iW = W - pL - pR, iH = H - pT - pB;
+    let svgChart = '';
+
+    if (hourlyData.length >= 2) {
+      const vals = hourlyData.map(d => parseFloat(d.value)).filter(v => !isNaN(v));
+      const minV = Math.min(...vals), maxV = Math.max(...vals);
+      const rangeV = (maxV - minV) || 0.1;
+      const n = hourlyData.length;
+      const toX = i => pL + (i / (n - 1)) * iW;
+      const toY = v => pT + (1 - (v - minV) / rangeV) * iH;
+
+      // Ligne "maintenant"
+      const t0 = new Date(hourlyData[0].eventDate).getTime();
+      const t1 = new Date(hourlyData[n-1].eventDate).getTime();
+      const nowPct = Math.max(0, Math.min(1, (now.getTime() - t0) / (t1 - t0)));
+      const nowX   = pL + nowPct * iW;
+
+      // Chemin SVG lissé
+      let pathD = '';
+      for (let i = 0; i < n; i++) {
+        const v = parseFloat(hourlyData[i].value);
+        if (isNaN(v)) continue;
+        const x = toX(i), y = toY(v);
+        if (!pathD) { pathD = `M ${x} ${y}`; continue; }
+        const px = toX(i-1), py = toY(parseFloat(hourlyData[i-1].value) || v);
+        const cpx = (px + x) / 2;
+        pathD += ` C ${cpx} ${py} ${cpx} ${y} ${x} ${y}`;
+      }
+      const areaD = pathD + ` L ${toX(n-1)} ${H-pB} L ${pL} ${H-pB} Z`;
+
+      // Marqueurs HH/BM sur le graphique
+      const exMarkers = extrema.slice(0, 8).map(ex => {
+        const tEx  = ex.date.getTime();
+        if (tEx < t0 || tEx > t1) return '';
+        const xPct = (tEx - t0) / (t1 - t0);
+        const x    = pL + xPct * iW;
+        const y    = toY(ex.value);
+        const col  = ex.type === 'HH' ? '#c05b38' : 'var(--accent)';
+        const dy   = ex.type === 'HH' ? -5 : 10;
+        return `<circle cx="${x}" cy="${y}" r="2.5" fill="${col}" opacity="0.85"/>
+                <text x="${x}" y="${y+dy}" text-anchor="middle" font-size="6" fill="${col}" font-weight="700" font-family="Arial">${ex.type}</text>`;
+      }).join('');
+
+      // Grille HH / BM
+      const gridHH = `<line x1="${pL}" y1="${toY(maxV)}" x2="${W-pR}" y2="${toY(maxV)}" stroke="#f5c4ae" stroke-width="0.6" stroke-dasharray="3 2"/>`;
+      const gridBM = `<line x1="${pL}" y1="${toY(minV)}" x2="${W-pR}" y2="${toY(minV)}" stroke="#b8ddef" stroke-width="0.6" stroke-dasharray="3 2"/>`;
+      const lblHH  = `<text x="${pL+1}" y="${toY(maxV)-2}" font-size="5.5" fill="#c05b38" font-family="Arial">${maxV.toFixed(2)} m</text>`;
+      const lblBM  = `<text x="${pL+1}" y="${toY(minV)+7}" font-size="5.5" fill="var(--accent)" font-family="Arial">${minV.toFixed(2)} m</text>`;
+
+      svgChart = `
+        <svg class="tide-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="tideGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#009ec2" stop-opacity="0.22"/>
+              <stop offset="100%" stop-color="#009ec2" stop-opacity="0.02"/>
+            </linearGradient>
+            <clipPath id="tideClip"><rect x="${pL}" y="${pT}" width="${iW}" height="${iH}"/></clipPath>
+          </defs>
+          ${gridHH}${gridBM}${lblHH}${lblBM}
+          <path d="${areaD}" fill="url(#tideGrad)" clip-path="url(#tideClip)"/>
+          <path d="${pathD}" fill="none" stroke="#009ec2" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round" clip-path="url(#tideClip)"/>
+          ${exMarkers}
+          <line x1="${nowX}" y1="${pT}" x2="${nowX}" y2="${H-pB}"
+                stroke="var(--brand)" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.55"/>
+          <text x="${nowX+2}" y="${pT+6}" font-size="5.5" fill="var(--brand)"
+                font-family="Arial" opacity="0.65">Maint.</text>
+        </svg>`;
+    }
+
+    // ── 6. Table des 6 prochaines marées ───────────────────────────
+    const tz = 'America/Toronto';
+    const nextRows = extrema.slice(0, 6).map(ex => {
+      const heure = ex.date.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit', timeZone: tz });
+      const date  = ex.date.toLocaleDateString('fr-CA', { weekday:'short', day:'numeric', month:'short', timeZone: tz });
+      const isPast = ex.date < now;
+      const badge = ex.type === 'HH'
+        ? `<span class="tide-badge HH">Haute mer</span>`
+        : `<span class="tide-badge BM">Basse mer</span>`;
+      return `<tr style="${isPast ? 'opacity:.45' : ''}">
+        <td>${badge}</td>
+        <td style="font-weight:600">${ex.value.toFixed(2)} m</td>
+        <td style="color:#888">${heure}</td>
+        <td style="color:#999;font-size:9px">${date}</td>
+      </tr>`;
+    }).join('');
+
+    // ── 7. Niveau observé ──────────────────────────────────────────
+    const levelHtml = currentLevel != null
+      ? `<div class="tide-now">
+           <span class="tide-now-val">${currentLevel.toFixed(2)}</span>
+           <span class="tide-now-unit">m</span>
+         </div>
+         <div class="tide-now-lbl">${currentTime
+           ? 'Observé à ' + currentTime.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit', timeZone: tz }) + ' HNA'
+           : 'Niveau observé'}</div>`
+      : '';
+
+    // ── 8. Rendu final ─────────────────────────────────────────────
+    el.innerHTML = `
+      <div class="tide-widget">
+        <div class="tide-header">Marée${nomEau ? ' — ' + nomEau : ''}</div>
+        <div class="tide-station">
+          📍 Station ${stCode} · ${stNom} ·
+          <a href="${mareeUrl}" target="_blank" rel="noopener"
+             style="color:var(--accent);font-size:9px">marees.gc.ca ↗</a>
+        </div>
+        ${levelHtml}
+        ${phaseCls ? `<span class="tide-phase ${phaseCls}">${phaseLabel}</span>` : ''}
+        ${svgChart ? `
+          <div style="font-size:9px;color:#aaa;margin-top:2px">Prédictions — 48 h</div>
+          <div class="tide-chart-wrap">${svgChart}</div>` : ''}
+        ${nextRows ? `
+          <table class="tide-table">
+            <thead><tr><th>Type</th><th>Hauteur</th><th>Heure</th><th>Date</th></tr></thead>
+            <tbody>${nextRows}</tbody>
+          </table>` : '<div style="font-size:11px;color:#aaa;padding:4px 0">Prédictions non disponibles.</div>'}
+        <div style="font-size:9px;color:#ccc;margin-top:4px">
+          Source : Pêches et Océans Canada — IWLS / SHC
+        </div>
+      </div>`;
+
+  } catch(err) {
+    console.warn('loadTides error:', err);
+    el.innerHTML = `
+      <div class="tide-widget">
+        <div class="tide-header">Marée${nomEau ? ' — ' + nomEau : ''}</div>
+        <div style="color:#aaa;font-size:11px;padding:8px 0">
+          Données indisponibles pour la station ${stCode}.<br>
+          <a href="${mareeUrl}" target="_blank" rel="noopener"
+             style="color:var(--accent)">Voir sur marees.gc.ca ↗</a>
+        </div>
+      </div>`;
   }
 }
 
@@ -2256,7 +2541,11 @@ document.querySelectorAll('.popup-tab').forEach(tab => {
     }
     if (t === 'debit' && !flowLoaded && lastPopupAttrs) {
       flowLoaded = true;
-      loadFlow(lastPopupAttrs, lastPopupLat, lastPopupLng);
+      if (isTidalSection(lastPopupAttrs)) {
+        loadTides(lastPopupAttrs, lastPopupLat, lastPopupLng);
+      } else {
+        loadFlow(lastPopupAttrs, lastPopupLat, lastPopupLng);
+      }
     }
     if (t === 'elev' && !elevLoaded && lastPopupLat) {
       elevLoaded = true;
