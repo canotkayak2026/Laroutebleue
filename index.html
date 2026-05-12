@@ -929,6 +929,33 @@ const MILIEU_ICO_WHITE = {
 };
 const MILIEU_LBL  = { EC:'Eau calme', EV:'Eau vive', MAR:'Marin/Fleuve' };
 
+// Labels des types de cours d'eau — seulement les rivières sont affichés avec leur label.
+// Toute autre valeur (Lac, Estuaire, Mer, Fleuve, etc.) retourne null → "Non applicable".
+const COURS_EAU_RIVIERE_LBL = {
+  'GR':        'Grande rivière',
+  'PR':        'Petite rivière',
+  'MR':        'Rivière moyenne',
+  'RR':        'Rivière rapide',
+  'RC':        'Rivière calme',
+  'RIV':       'Rivière',
+  'RIVIERE':   'Rivière',
+  'GRANDE':    'Grande rivière',
+  'PETITE':    'Petite rivière',
+  'MOYENNE':   'Rivière moyenne',
+  'RAPIDE':    'Rivière rapide',
+  'CALME':     'Rivière calme',
+};
+function getCourseauLabel(val) {
+  if (!val || !val.toString().trim()) return null;
+  const v = val.toString().trim().toUpperCase().replace(/[-_\s]+/g, '');
+  for (const [code, label] of Object.entries(COURS_EAU_RIVIERE_LBL)) {
+    if (v === code.replace(/[-_\s]+/g,'').toUpperCase() || v.includes(code.replace(/[-_\s]+/g,'').toUpperCase())) {
+      return label;
+    }
+  }
+  return null; // Lac, Estuaire, Mer, etc. → on signale que ça ne s'applique pas
+}
+
 // Champs à récupérer (tous les champs pertinents de la couche)
 const OUT_FIELDS = [
   'OBJECTID','NOM','NOM_RTE_BLEUE','NO_SECTN','ID_SECTN','ID_PARCR',
@@ -1415,6 +1442,10 @@ async function showPopup(attrs, lat, lng) {
   if (attrs.DEBIT_MIN && attrs.DEBIT_MAX)
     stats.push({ label:'Débit', value:`${attrs.DEBIT_MIN}–${attrs.DEBIT_MAX} m³/s` });
   if (attrs.MUNIC)         stats.push({ label:'Municipalité', value: attrs.MUNIC });
+  if (attrs.TYPE_COURS_EAU !== undefined && attrs.TYPE_COURS_EAU !== null) {
+    const ceauLabel = getCourseauLabel(attrs.TYPE_COURS_EAU);
+    stats.push({ label:"Type de cours d'eau", value: ceauLabel || '—' });
+  }
 
   elGrid.innerHTML = stats.map(s => `
     <div class="popup-stat">
@@ -2096,10 +2127,15 @@ async function loadFlow(attrs, lat, lng) {
 
   el.innerHTML = `<div class="flow-loading">Recherche station hydrométrique…</div>`;
 
+  // Numéro de station explicite dans la couche (priorité absolue)
+  const stCodeCEHQ = (attrs.NO_STATION_CEHQ || '').trim();
+
   // ── 1. Fetch API MSP GeoJSON ────────────────────────────────────
-  let graphUrl  = 'https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm';
+  let graphUrl  = stCodeCEHQ
+    ? `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${stCodeCEHQ}`
+    : 'https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm';
   let realValue = null, realUnit = null, realDate = null;
-  let stationNom = '', stationDist = null, stationNo = null;
+  let stationNom = '', stationDist = null, stationNo = stCodeCEHQ || null;
 
   try {
     const wfsUrl = 'https://geoegl.msp.gouv.qc.ca/apis/mapserver-vigilance/ws/vigilance.fcgi' +
@@ -2107,28 +2143,40 @@ async function loadFlow(attrs, lat, lng) {
     const res  = await fetch(wfsUrl);
     const data = await res.json();
 
-    // Trouver la station la plus proche (Haversine)
-    const toRad = d => d * Math.PI / 180;
-    let minDist = Infinity, best = null;
-    for (const feat of data.features) {
-      const [sLng, sLat] = feat.geometry.coordinates;
-      const dLat = toRad(sLat - lat), dLon = toRad(sLng - lng);
-      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat))*Math.cos(toRad(sLat))*Math.sin(dLon/2)**2;
-      const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      if (dist < minDist) { minDist = dist; best = feat; }
+    let best = null;
+
+    if (stCodeCEHQ) {
+      // ── Priorité : chercher par numéro de station exact ──────────
+      best = data.features.find(f =>
+        String(f.properties.station || '').trim().toUpperCase() === stCodeCEHQ.toUpperCase()
+      ) || null;
+      if (best) stationDist = null; // distance non pertinente : station choisie explicitement
+    }
+
+    if (!best) {
+      // ── Fallback : station la plus proche géographiquement ────────
+      const toRad = d => d * Math.PI / 180;
+      let minDist = Infinity;
+      for (const feat of data.features) {
+        const [sLng, sLat] = feat.geometry.coordinates;
+        const dLat = toRad(sLat - lat), dLon = toRad(sLng - lng);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat))*Math.cos(toRad(sLat))*Math.sin(dLon/2)**2;
+        const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        if (dist < minDist) { minDist = dist; best = feat; }
+      }
+      if (best) stationDist = minDist;
     }
 
     if (best) {
       const p = best.properties;
-      stationDist = minDist;
-      stationNo   = p.station || null;
-      stationNom  = p.description || p.plan_deau || '';
+      stationNo  = p.station || stationNo;
+      stationNom = p.description || p.plan_deau || '';
 
-      // URL graphique directe depuis le champ fournisseur_url
+      // URL graphique CEHQ
       if (p.fournisseur_url && p.fournisseur_url.includes('cehq')) {
         graphUrl = p.fournisseur_url;
-      } else if (p.station && p.fournisseur_url === null) {
-        graphUrl = `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${p.station}`;
+      } else if (stationNo) {
+        graphUrl = `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${stationNo}`;
       }
 
       // Valeur temps réel — débit en priorité, sinon niveau
@@ -2140,10 +2188,9 @@ async function loadFlow(attrs, lat, lng) {
         realValue = niv; realUnit = 'm';
       }
 
-      // Heure de la mesure (UTC → afficher tel quel avec mention UTC)
+      // Heure de la mesure
       if (p.dern_date_prise_valeur_utc) {
         const d = new Date(p.dern_date_prise_valeur_utc.replace(' ', 'T') + 'Z');
-        // Convertir en HNE (UTC-4 ou UTC-5)
         const hne = new Date(d.getTime() - 4 * 3600000);
         realDate = hne.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit' });
       }
@@ -2161,7 +2208,8 @@ async function loadFlow(attrs, lat, lng) {
         </div>
         <div style="font-size:9px;color:#bbb;margin-bottom:8px">
           ${realDate ? realDate + ' HNE' : ''}${stationNom ? ' · ' + stationNom : ''}
-          ${stationDist != null ? ` · ${stationDist.toFixed(1)} km` : ''}
+        ${stationDist != null ? ` · ${stationDist.toFixed(1)} km` : ''}
+        ${stCodeCEHQ && !stationDist ? ' · station assignée' : ''}
         </div>` : `
         <div style="padding:8px 0;font-size:11px;color:#888">Aucune plage recommandée pour ce parcours.</div>`}
       <a href="${graphUrl}" target="_blank"
@@ -2200,7 +2248,7 @@ async function loadFlow(attrs, lat, lng) {
   let realHtml = '';
   if (realValue != null) {
     const valFmt = Number.isInteger(realValue) ? realValue : realValue.toFixed(2);
-    const stNote = [stationNom, stationDist != null ? `${stationDist.toFixed(1)} km` : ''].filter(Boolean).join(' · ');
+    const stNote = [stationNom, stationDist != null ? `${stationDist.toFixed(1)} km` : (stCodeCEHQ ? 'station assignée' : '')].filter(Boolean).join(' · ');
     realHtml = `
       <div style="background:var(--mist);border-radius:8px;padding:8px 10px;margin-top:6px">
         <div style="font-size:8.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px">
