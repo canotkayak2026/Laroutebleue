@@ -1398,12 +1398,102 @@ searchInput.addEventListener('input', () => {
   sidebarCount.textContent = `${visible} résultat${visible !== 1 ? 's' : ''}`;
 });
 
+// ── Widget inline Marée (onglet Info) ────────────────────────────
+async function renderInlineTide(attrs) {
+  const wrap = document.getElementById('inline-flow-wrap');
+  if (!wrap) return;
+  const stCode = (attrs.NO_STATION_CEHQ || '').trim();
+  if (!stCode) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = `<div style="padding:4px 0 6px;font-size:9px;color:#bbb">Chargement marée…</div>`;
+
+  const mareeUrl = `https://marees.gc.ca/fr/stations/${stCode}`;
+  const nomEau   = attrs.NOM_PLAN_EAU || '';
+  const IWLS     = 'https://api-sine.dfo-mpo.gc.ca/api/v1';
+  const tz       = 'America/Toronto';
+
+  try {
+    const now    = new Date();
+    const tMinus = new Date(now.getTime() - 2 * 3600000);
+    const tPlus  = new Date(now.getTime() + 24 * 3600000);
+    const fmt    = d => d.toISOString().slice(0,19) + 'Z';
+
+    const [metaRes, hiloRes, obsRes] = await Promise.all([
+      fetch(`${IWLS}/stations/${stCode}`),
+      fetch(`${IWLS}/stations/${stCode}/data?time-series-code=wlp-hilo&from=${fmt(now)}&to=${fmt(tPlus)}`),
+      fetch(`${IWLS}/stations/${stCode}/data?time-series-code=wlo&from=${fmt(tMinus)}&to=${fmt(now)}&resolution=ONE_MINUTE`).catch(()=>null)
+    ]);
+
+    const meta      = metaRes.ok ? await metaRes.json() : {};
+    const stNom     = meta.officialName || meta.name || stCode;
+    const hiloData  = hiloRes.ok ? await hiloRes.json() : [];
+
+    // Niveau observé actuel
+    let currentLevel = null, currentTime = null;
+    if (obsRes && obsRes.ok) {
+      const obsData = await obsRes.json();
+      for (let i = obsData.length - 1; i >= 0; i--) {
+        const v = parseFloat(obsData[i].value);
+        if (!isNaN(v)) { currentLevel = v; currentTime = new Date(obsData[i].eventDate); break; }
+      }
+    }
+
+    // Prochaines marées
+    const extrema = hiloData
+      .map(d => ({ type: d.phenomenon === 'highWater' ? 'HH' : 'BM', value: parseFloat(d.value), date: new Date(d.eventDate) }))
+      .filter(d => !isNaN(d.value))
+      .sort((a,b) => a.date - b.date);
+
+    // Phase
+    const nextEx = extrema.find(e => e.date > now);
+    const prevEx = [...extrema].reverse().find(e => e.date <= now);
+    let phaseLabel = '—', phaseCls = '';
+    if (nextEx) {
+      if (nextEx.type === 'HH') { phaseLabel = '↑ Montante'; phaseCls = 'rising'; }
+      else                      { phaseLabel = '↓ Descendante'; phaseCls = 'falling'; }
+    } else if (prevEx) { phaseLabel = '≈ Étale'; phaseCls = 'high'; }
+
+    // Prochaine marée
+    const prochaine = nextEx
+      ? `${nextEx.type === 'HH' ? '🔺 Haute mer' : '🔻 Basse mer'} <strong>${nextEx.value.toFixed(2)} m</strong> à ${nextEx.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})}`
+      : '';
+
+    wrap.innerHTML = `
+      <div style="padding:8px 0 4px;border-top:1px solid #f0f0f0;margin-top:2px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:8.5px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.1em">Marée · ${nomEau || stNom}</span>
+          <a href="${mareeUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">marees.gc.ca ↗</a>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+          ${currentLevel != null ? `
+          <div>
+            <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em">Niveau actuel${currentTime ? ' · ' + currentTime.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz}) + ' HNA' : ''}</div>
+            <div style="font-size:22px;font-weight:700;color:var(--ink);line-height:1.1">${currentLevel.toFixed(2)} <span style="font-size:11px;color:#888;font-weight:400">m</span></div>
+          </div>` : ''}
+          <div style="flex:1;min-width:0">
+            ${phaseCls ? `<span class="tide-phase ${phaseCls}" style="font-size:10px;padding:2px 8px;margin-bottom:4px;display:inline-flex">${phaseLabel}</span>` : ''}
+            ${prochaine ? `<div style="font-size:10px;color:#666;margin-top:4px">${prochaine}</div>` : ''}
+          </div>
+        </div>
+      </div>`;
+
+  } catch(e) {
+    wrap.innerHTML = `
+      <div style="padding:6px 0;font-size:10px;color:#aaa">
+        Données de marée indisponibles ·
+        <a href="${mareeUrl}" target="_blank" style="color:var(--accent)">marees.gc.ca ↗</a>
+      </div>`;
+  }
+}
+
 // ── Mini-jauge débit inline (onglet Info) ────────────────────────
-// Appelée pendant showPopup — affiche une jauge compacte avec curseur
-// et valeur temps réel directement dans le panneau principal.
 async function renderInlineFlow(attrs) {
   const wrap = document.getElementById('inline-flow-wrap');
   if (!wrap) return;
+
+  // Sections marée → widget marée à la place
+  if (isTidalSection(attrs)) { renderInlineTide(attrs); return; }
 
   const dmin = attrs.DEBIT_MIN, dmax = attrs.DEBIT_MAX;
   const stCode = (attrs.NO_STATION_CEHQ || '').trim();
@@ -1458,38 +1548,42 @@ async function renderInlineFlow(attrs) {
   const lblColor = statusClass === 'low' ? '#e6a817' : statusClass === 'high' ? '#d94040' : 'var(--ink)';
 
   wrap.innerHTML = `
-    <div style="padding:8px 0 4px">
+    <div style="padding:8px 0 4px;border-top:1px solid #f0f0f0;margin-top:2px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <span style="font-size:8.5px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.1em">Débit en temps réel</span>
         ${flowVal != null
-          ? `<span style="font-size:12px;font-weight:700;color:${lblColor}">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s${realDate ? `<span style="font-size:9px;font-weight:400;color:#bbb;margin-left:4px">${realDate} HNE</span>` : ''}</span>`
+          ? `<span style="font-size:13px;font-weight:700;color:${lblColor}">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s${realDate ? `<span style="font-size:9px;font-weight:400;color:#bbb;margin-left:4px">${realDate} HNE</span>` : ''}</span>`
           : `<a href="${graphUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">CEHQ ↗</a>`}
       </div>
 
       <!-- Jauge compacte -->
-      <div style="position:relative;margin-bottom:${flowVal != null ? '18px' : '4px'}">
+      <div style="position:relative;margin-bottom:${flowVal != null ? '20px' : '4px'}">
         <!-- Labels min/max -->
         <div style="position:relative;height:14px;margin-bottom:2px">
           <span style="position:absolute;left:${pctMin}%;transform:translateX(-50%);font-size:8px;color:var(--green);font-weight:700;white-space:nowrap">${dmin} m³/s</span>
           <span style="position:absolute;left:${pctMax}%;transform:translateX(-50%);font-size:8px;color:var(--green);font-weight:700;white-space:nowrap">${dmax} m³/s</span>
         </div>
         <!-- Barre -->
-        <div style="height:6px;background:#e8f0fa;border-radius:3px;overflow:visible;position:relative">
+        <div style="height:7px;background:#e8f0fa;border-radius:4px;overflow:visible;position:relative">
+          <!-- Zone recommandée -->
           <div style="position:absolute;left:${pctMin}%;width:${pctMax-pctMin}%;height:100%;background:rgba(45,158,107,.25);border-radius:2px;top:0"></div>
+          <!-- Barre remplie -->
           ${flowVal != null
-            ? `<div style="height:100%;width:${pct}%;border-radius:3px;background:${barColor}"></div>`
-            : `<div style="height:100%;width:${(pctMin+pctMax)/2}%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--brand));opacity:.2"></div>`}
+            ? `<div style="height:100%;width:${pct}%;border-radius:4px;background:${barColor}"></div>`
+            : `<div style="height:100%;width:${(pctMin+pctMax)/2}%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--brand));opacity:.18"></div>`}
+          <!-- Marqueurs min/max -->
           <div style="position:absolute;top:0;left:${pctMin}%;transform:translateX(-50%);width:2px;height:100%;background:var(--green);border-radius:1px"></div>
           <div style="position:absolute;top:0;left:${pctMax}%;transform:translateX(-50%);width:2px;height:100%;background:var(--green);border-radius:1px"></div>
           ${flowVal != null ? `
-          <!-- Curseur avec valeur -->
-          <div style="position:absolute;top:-5px;left:${pct}%;transform:translateX(-50%);width:3px;height:calc(100% + 10px);background:${lblColor};border-radius:2px;opacity:.85"></div>
-          <div style="position:absolute;top:calc(100% + 4px);left:${pct}%;transform:translateX(-50%);font-size:8.5px;font-weight:700;color:${lblColor};white-space:nowrap">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s</div>
+          <!-- Curseur vertical -->
+          <div style="position:absolute;top:-5px;left:${pct}%;transform:translateX(-50%);width:3px;height:calc(100% + 10px);background:${lblColor};border-radius:2px;opacity:.9"></div>
+          <!-- Valeur sous le curseur -->
+          <div style="position:absolute;top:calc(100% + 5px);left:${pct}%;transform:translateX(-50%);font-size:8.5px;font-weight:700;color:${lblColor};white-space:nowrap;background:#fff;padding:0 2px;border-radius:2px">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s</div>
           ` : ''}
         </div>
       </div>
 
-      <div style="display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
         <span class="flow-status ${statusClass}" style="font-size:9px;padding:2px 7px">${statusLabel}</span>
         <a href="${graphUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">Graphique CEHQ ↗</a>
       </div>
@@ -1541,10 +1635,6 @@ async function showPopup(attrs, lat, lng) {
   if (attrs.DEBIT_MIN && attrs.DEBIT_MAX)
     stats.push({ label:'Débit recommandé', value:`${attrs.DEBIT_MIN}–${attrs.DEBIT_MAX} m³/s` });
   if (attrs.IND_QUALT_EAU) stats.push({ label:"Qualité de l'eau", value: attrs.IND_QUALT_EAU });
-  if (attrs.TYPE_COURS_EAU !== undefined && attrs.TYPE_COURS_EAU !== null) {
-    const ceauLabel = getCourseauLabel(attrs.TYPE_COURS_EAU);
-    stats.push({ label:"Type de cours d'eau", value: ceauLabel || '—' });
-  }
 
   elGrid.innerHTML = stats.map(s => `
     <div class="popup-stat">
