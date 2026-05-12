@@ -855,6 +855,8 @@
       </div>
 
       <div id="pane-info" class="popup-tab-pane active">
+        <!-- Mini-jauge débit inline (si station assignée et DEBIT_MIN/MAX présents) -->
+        <div id="inline-flow-wrap" style="display:none; padding:0 0 10px 0"></div>
         <div style="padding:0 0 12px 0">
           <div class="popup-divider" id="popup-divider"></div>
           <a class="popup-btn" id="popup-btn" href="#" target="_blank" rel="noopener">
@@ -900,6 +902,17 @@ const REGIONS = {
 const DUREE_LBL   = { J01:'< ½ jour', J02:'½ jour', J03:'1 jour', J04:'2 jours', J05:'3 jours+' };
 const DIFFI_LBL   = { ND01:'Débutant', ND02:'Intermédiaire', ND03:'Avancé', ND04:'Expert' };
 const TRAJET_LBL  = { ALL:'Aller simple', ALR:'Aller-retour', BOU:'Boucle' };
+
+// Classe de rivière (D01–D06) et zone aquatique (Z01–Z06)
+function getClassLabel(val) {
+  if (!val) return null;
+  const v = val.toString().trim().toUpperCase();
+  const mD = v.match(/^D0?(\d+)$/);
+  if (mD) return `Classe ${mD[1]}`;
+  const mZ = v.match(/^Z0?(\d+)$/);
+  if (mZ) return `Zone ${mZ[1]}`;
+  return val; // fallback : afficher la valeur brute
+}
 
 // Icônes officielles La route bleue (URLs relatives)
 const MILIEU_ICO = {
@@ -1385,6 +1398,104 @@ searchInput.addEventListener('input', () => {
   sidebarCount.textContent = `${visible} résultat${visible !== 1 ? 's' : ''}`;
 });
 
+// ── Mini-jauge débit inline (onglet Info) ────────────────────────
+// Appelée pendant showPopup — affiche une jauge compacte avec curseur
+// et valeur temps réel directement dans le panneau principal.
+async function renderInlineFlow(attrs) {
+  const wrap = document.getElementById('inline-flow-wrap');
+  if (!wrap) return;
+
+  const dmin = attrs.DEBIT_MIN, dmax = attrs.DEBIT_MAX;
+  const stCode = (attrs.NO_STATION_CEHQ || '').trim();
+
+  // N'afficher que si plage recommandée ET station assignée
+  if (!dmin || !dmax || !stCode) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = 'block';
+  wrap.innerHTML = `<div style="padding:2px 0 6px;font-size:9px;color:#bbb;text-align:right">Chargement du débit…</div>`;
+
+  // Calcul de la jauge (même logique que loadFlow)
+  const rangeSpan  = (dmax - dmin) || dmax || 100;
+  const bufferSize = rangeSpan / 0.70;
+  const scaleMin   = dmin - bufferSize * 0.15;
+  const scaleMax   = scaleMin + bufferSize;
+  const toBarPct   = v => Math.min(98, Math.max(2, ((v - scaleMin) / (scaleMax - scaleMin)) * 100));
+  const pctMin = toBarPct(dmin);
+  const pctMax = toBarPct(dmax);
+  const graphUrl = `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${stCode}`;
+
+  // Fetch temps réel
+  let flowVal = null, realDate = null, statusClass = 'ok', statusLabel = '✓ Conditions favorables';
+  try {
+    const wfsUrl = 'https://geoegl.msp.gouv.qc.ca/apis/mapserver-vigilance/ws/vigilance.fcgi' +
+      '?service=wfs&version=1.1.0&request=getfeature&typename=stations_igo2_public&outputformat=geojson&srsname=EPSG:4326';
+    const data = await (await fetch(wfsUrl)).json();
+    const match = data.features.find(f =>
+      String(f.properties.station || '').trim().toUpperCase() === stCode.toUpperCase()
+    );
+    if (match) {
+      const p = match.properties;
+      const deb = parseFloat(p.dern_valeur_deb);
+      if (!isNaN(deb) && p.dern_valeur_deb !== null && p.dern_valeur_deb !== '') {
+        flowVal = deb;
+      }
+      if (p.dern_date_prise_valeur_utc) {
+        const d = new Date(p.dern_date_prise_valeur_utc.replace(' ', 'T') + 'Z');
+        const hne = new Date(d.getTime() - 4 * 3600000);
+        realDate = hne.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit' });
+      }
+    }
+  } catch(e) { /* silencieux */ }
+
+  let pct = (pctMin + pctMax) / 2;
+  if (flowVal != null) {
+    pct = toBarPct(flowVal);
+    if      (flowVal < dmin) { statusClass = 'low';  statusLabel = '⚠ Débit trop faible'; }
+    else if (flowVal > dmax) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
+  }
+
+  const barColor = statusClass === 'low' ? '#e6a817' : statusClass === 'high' ? '#d94040' : 'linear-gradient(90deg,var(--accent),var(--brand))';
+  const lblColor = statusClass === 'low' ? '#e6a817' : statusClass === 'high' ? '#d94040' : 'var(--ink)';
+
+  wrap.innerHTML = `
+    <div style="padding:8px 0 4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:8.5px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.1em">Débit en temps réel</span>
+        ${flowVal != null
+          ? `<span style="font-size:12px;font-weight:700;color:${lblColor}">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s${realDate ? `<span style="font-size:9px;font-weight:400;color:#bbb;margin-left:4px">${realDate} HNE</span>` : ''}</span>`
+          : `<a href="${graphUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">CEHQ ↗</a>`}
+      </div>
+
+      <!-- Jauge compacte -->
+      <div style="position:relative;margin-bottom:${flowVal != null ? '18px' : '4px'}">
+        <!-- Labels min/max -->
+        <div style="position:relative;height:14px;margin-bottom:2px">
+          <span style="position:absolute;left:${pctMin}%;transform:translateX(-50%);font-size:8px;color:var(--green);font-weight:700;white-space:nowrap">${dmin} m³/s</span>
+          <span style="position:absolute;left:${pctMax}%;transform:translateX(-50%);font-size:8px;color:var(--green);font-weight:700;white-space:nowrap">${dmax} m³/s</span>
+        </div>
+        <!-- Barre -->
+        <div style="height:6px;background:#e8f0fa;border-radius:3px;overflow:visible;position:relative">
+          <div style="position:absolute;left:${pctMin}%;width:${pctMax-pctMin}%;height:100%;background:rgba(45,158,107,.25);border-radius:2px;top:0"></div>
+          ${flowVal != null
+            ? `<div style="height:100%;width:${pct}%;border-radius:3px;background:${barColor}"></div>`
+            : `<div style="height:100%;width:${(pctMin+pctMax)/2}%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--brand));opacity:.2"></div>`}
+          <div style="position:absolute;top:0;left:${pctMin}%;transform:translateX(-50%);width:2px;height:100%;background:var(--green);border-radius:1px"></div>
+          <div style="position:absolute;top:0;left:${pctMax}%;transform:translateX(-50%);width:2px;height:100%;background:var(--green);border-radius:1px"></div>
+          ${flowVal != null ? `
+          <!-- Curseur avec valeur -->
+          <div style="position:absolute;top:-5px;left:${pct}%;transform:translateX(-50%);width:3px;height:calc(100% + 10px);background:${lblColor};border-radius:2px;opacity:.85"></div>
+          <div style="position:absolute;top:calc(100% + 4px);left:${pct}%;transform:translateX(-50%);font-size:8.5px;font-weight:700;color:${lblColor};white-space:nowrap">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s</div>
+          ` : ''}
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span class="flow-status ${statusClass}" style="font-size:9px;padding:2px 7px">${statusLabel}</span>
+        <a href="${graphUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">Graphique CEHQ ↗</a>
+      </div>
+    </div>`;
+}
+
 // ── Popup ────────────────────────────────────────────────────────
 async function showPopup(attrs, lat, lng) {
   const oid = attrs.OBJECTID;
@@ -1423,7 +1534,7 @@ async function showPopup(attrs, lat, lng) {
   if (attrs.DUREE_H)       stats.push({ label:'Durée',           value: attrs.DUREE_H });
   else if (attrs.DUREE)    stats.push({ label:'Durée',           value: DUREE_LBL[attrs.DUREE] || attrs.DUREE });
   if (attrs.NIV_DIFFI)     stats.push({ label:'Difficulté',      value: DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI });
-  if (attrs.NIV_CLASS_GEN) stats.push({ label:'Classe rivière',  value: attrs.NIV_CLASS_GEN });
+  if (attrs.NIV_CLASS_GEN) stats.push({ label:'Classe rivière',  value: getClassLabel(attrs.NIV_CLASS_GEN) });
   if (attrs.TYPE_TRAJET)   stats.push({ label:'Trajet',          value: TRAJET_LBL[attrs.TYPE_TRAJET] || attrs.TYPE_TRAJET });
   if (attrs.TYPE_MILIEUX)  stats.push({ label:'Milieu',          value: MILIEU_LBL[attrs.TYPE_MILIEUX] || attrs.TYPE_MILIEUX });
   if (attrs.NOM_PLAN_EAU)  stats.push({ label:"Plan d'eau",      value: attrs.NOM_PLAN_EAU });
@@ -1440,6 +1551,9 @@ async function showPopup(attrs, lat, lng) {
       <div class="popup-stat-label">${s.label}</div>
       <div class="popup-stat-value">${s.value}</div>
     </div>`).join('');
+
+  // Mini-jauge débit inline (chargement asynchrone, non bloquant)
+  renderInlineFlow(attrs);
 
   // Tags de statut / services — uniquement les champs réellement présents dans la couche
   const tags = [];
