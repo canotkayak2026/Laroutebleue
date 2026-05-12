@@ -289,6 +289,21 @@
     .popup-stat { background:var(--mist); border-radius:8px; padding:7px 10px; }
     .popup-stat-label { font-family:Arial,sans-serif; font-size:9px; color:#999; letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
     .popup-stat-value { font-size:12px; font-weight:600; color:var(--ink); }
+    .popup-stat-empty { background:var(--mist); border-radius:8px; padding:7px 10px; opacity:.35; }
+    .popup-stat-empty .popup-stat-label { font-family:Arial,sans-serif; font-size:9px; color:#ccc; letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
+    .popup-stat-empty .popup-stat-value { font-size:12px; font-weight:500; color:#ddd; font-style:italic; }
+
+    /* Services */
+    .popup-services { margin-bottom:12px; }
+    .popup-services-title { font-family:Arial,sans-serif; font-size:9px; font-weight:700; color:#999; letter-spacing:.1em; text-transform:uppercase; margin-bottom:7px; }
+    .popup-services-row { display:flex; gap:6px; flex-wrap:wrap; }
+    .svc-badge {
+      display:flex; align-items:center; gap:5px;
+      background:var(--foam); border:1px solid var(--ripple);
+      border-radius:20px; padding:4px 10px 4px 7px;
+      font-family:'Montserrat',Arial,sans-serif; font-size:10px; font-weight:600; color:var(--brand);
+    }
+    .svc-badge svg { width:13px; height:13px; stroke:var(--accent); fill:none; stroke-width:2; stroke-linecap:round; flex-shrink:0; }
 
     .popup-tags { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:12px; }
     .popup-tag { font-family:Arial,sans-serif; font-size:10px; font-weight:500; padding:3px 8px; border-radius:5px; background:var(--foam); color:var(--brand); border:1px solid var(--ripple); letter-spacing:.04em; }
@@ -844,6 +859,7 @@
     <div class="popup-body">
       <div class="popup-desc"    id="popup-desc"></div>
       <div class="popup-grid"    id="popup-grid"></div>
+      <div class="popup-services" id="popup-services" style="display:none"></div>
       <div class="popup-tags"    id="popup-tags"></div>
 
       <!-- Onglets contextuels -->
@@ -963,7 +979,8 @@ const OUT_FIELDS = [
   'URL_FICHE_RB',
   'NO_REG_ADM','NO_REG_TOURST',
   'NOM_PLAN_EAU','TYPE_COURS_EAU','IND_QUALT_EAU',
-  'NOM_RB_MINI','NO_STATION_CEHQ'
+  'NOM_RB_MINI','NO_STATION_CEHQ',
+  'TARIF','STAT_LAVAGE','LOCATION','SERV_GUID','NAVETTE'
 ].join(',');
 
 // Valeurs du domaine TYPE_COURS_EAU considérées comme milieu marin (marée)
@@ -1429,27 +1446,75 @@ async function showPopup(attrs, lat, lng) {
   elDesc.style.display = desc ? 'block' : 'none';
   elDesc.textContent   = desc;
 
-  // Grille de stats — infos du parcours uniquement, pas de débit/marée/qualité eau
-  const stats = [];
-  if (attrs.LONGU)         stats.push({ label:'Distance',        value:`${attrs.LONGU} km` });
-  if (attrs.DUREE_H)       stats.push({ label:'Durée',           value: attrs.DUREE_H });
-  else if (attrs.DUREE)    stats.push({ label:'Durée',           value: DUREE_LBL[attrs.DUREE] || attrs.DUREE });
-  if (attrs.NIV_DIFFI)     stats.push({ label:'Difficulté',      value: DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI });
-  if (attrs.NIV_CLASS_GEN) stats.push({ label:'Classe',          value: getClassLabel(attrs.NIV_CLASS_GEN) });
-  if (attrs.TYPE_TRAJET)   stats.push({ label:'Trajet',          value: TRAJET_LBL[attrs.TYPE_TRAJET] || attrs.TYPE_TRAJET });
-  if (attrs.TYPE_MILIEUX)  stats.push({ label:'Milieu',          value: MILIEU_LBL[attrs.TYPE_MILIEUX] || attrs.TYPE_MILIEUX });
-  if (attrs.NOM_PLAN_EAU)  stats.push({ label:"Plan d'eau",      value: attrs.NOM_PLAN_EAU });
+  // Grille fixe 3 rangées × 2 colonnes :
+  // Rangée 1 : Milieu | Trajet
+  // Rangée 2 : Distance | Durée
+  // Rangée 3 : Difficulté | Zone / Classe
+  function statCell(label, value) {
+    if (value) return `<div class="popup-stat"><div class="popup-stat-label">${label}</div><div class="popup-stat-value">${value}</div></div>`;
+    return `<div class="popup-stat-empty"><div class="popup-stat-label">${label}</div><div class="popup-stat-value">—</div></div>`;
+  }
 
-  elGrid.innerHTML = stats.map(s => `
-    <div class="popup-stat">
-      <div class="popup-stat-label">${s.label}</div>
-      <div class="popup-stat-value">${s.value}</div>
-    </div>`).join('');
+  const milieu    = attrs.TYPE_MILIEUX  ? (MILIEU_LBL[attrs.TYPE_MILIEUX]  || attrs.TYPE_MILIEUX)  : null;
+  const trajet    = attrs.TYPE_TRAJET   ? (TRAJET_LBL[attrs.TYPE_TRAJET]   || attrs.TYPE_TRAJET)   : null;
+  const distance  = attrs.LONGU         ? `${attrs.LONGU} km`                                       : null;
+  const duree     = attrs.DUREE_H       ? attrs.DUREE_H
+                  : attrs.DUREE         ? (DUREE_LBL[attrs.DUREE] || attrs.DUREE)                  : null;
+  const diffi     = attrs.NIV_DIFFI     ? (DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI)          : null;
+  const zoneClass = attrs.NIV_CLASS_GEN ? getClassLabel(attrs.NIV_CLASS_GEN)                        : null;
 
-  // Tags de statut / services — uniquement les champs réellement présents dans la couche
+  elGrid.innerHTML =
+    statCell('Milieu',      milieu)   +
+    statCell('Trajet',      trajet)   +
+    statCell('Distance',    distance) +
+    statCell('Durée',       duree)    +
+    statCell('Difficulté',  diffi)    +
+    statCell('Zone / Classe', zoneClass);
+
+  // ── Services (icônes si = 'Oui' / 'OUI' / 1 / true) ─────────────
+  const SVC_ICONS = {
+    TARIF: {
+      label: 'Tarif',
+      svg: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.4-.9 2.1-2.5 2.5-1.6.4-2.5 1.1-2.5 2.5a2.5 2.5 0 0 0 5 0"/></svg>`
+    },
+    STAT_LAVAGE: {
+      label: 'Station de lavage',
+      svg: `<svg viewBox="0 0 24 24"><path d="M4 12c0-4.4 3.6-8 8-8s8 3.6 8 8"/><path d="M12 4v2M6.3 6.3l1.4 1.4M4 12h2M17.7 6.3l-1.4 1.4M20 12h-2"/><path d="M8 16c1-2 6-2 7 0"/><path d="M9 19h6"/></svg>`
+    },
+    LOCATION: {
+      label: 'Location',
+      svg: `<svg viewBox="0 0 24 24"><path d="M12 22s-7-5.7-7-12a7 7 0 1 1 14 0c0 6.3-7 12-7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>`
+    },
+    SERV_GUID: {
+      label: 'Service guidé',
+      svg: `<svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><path d="M5.5 21v-2a6.5 6.5 0 0 1 13 0v2"/><path d="M12 11v4M10 15h4"/></svg>`
+    },
+    NAVETTE: {
+      label: 'Navette',
+      svg: `<svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="10" rx="2"/><path d="M6 18v2M18 18v2"/><path d="M2 13h20"/><circle cx="7" cy="13" r="1" fill="currentColor"/><path d="M7 8V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v3"/></svg>`
+    }
+  };
+
+  const isOui = v => v === 'Oui' || v === 'OUI' || v === 'oui' || v === 1 || v === true || v === 'O';
+  const activeServices = Object.entries(SVC_ICONS).filter(([key]) => isOui(attrs[key]));
+
+  const elServices = document.getElementById('popup-services');
+  if (activeServices.length > 0) {
+    elServices.style.display = 'block';
+    elServices.innerHTML = `
+      <div class="popup-services-title">Services disponibles</div>
+      <div class="popup-services-row">
+        ${activeServices.map(([, svc]) => `
+          <div class="svc-badge">${svc.svg}${svc.label}</div>
+        `).join('')}
+      </div>`;
+  } else {
+    elServices.style.display = 'none';
+    elServices.innerHTML = '';
+  }
+
+  // Tags de statut (réservé pour usage futur)
   const tags = [];
-  // (ETAT_SECTION, TARIF, LOCAT, NAVETT, SERV_GUID absents de la couche parcours)
-
   elTags.innerHTML = tags.map(t => `<span class="popup-tag ${t.cls}">${t.label}</span>`).join('');
   elTags.style.display = tags.length ? 'flex' : 'none';
 
@@ -1875,43 +1940,45 @@ async function loadTides(attrs, lat, lng) {
     return;
   }
 
-  // ── Wrapper cliquable — toute la section ouvre marees.gc.ca ───────
-  const wrapStyle = `display:flex;flex-direction:column;gap:0;text-decoration:none;color:inherit;
-    cursor:pointer;border-radius:8px;transition:background .15s;padding:0;`;
-
   try {
     const now    = new Date();
     const tMinus = new Date(now.getTime() - 3 * 3600000);
     const tPlus  = new Date(now.getTime() + 48 * 3600000);
     const fmt    = d => d.toISOString().slice(0, 19) + 'Z';
 
-    // L'API IWLS utilise un UUID interne — on cherche d'abord la station par son code
-    // endpoint: GET /stations?chs-region=all retourne trop, on cherche par code directement
-    const searchRes = await fetch(
-      `${IWLS_BASE}/stations?type=TIDE`,
-      { mode: 'cors', headers: { 'Accept': 'application/json' } }
+    // ── 1. Trouver l'ID interne IWLS via la liste des stations ─────
+    // L'API utilise un UUID interne, pas le code numérique (ex. "02200")
+    const stationsRes = await fetch(`${IWLS_BASE}/stations?type=TIDE`);
+    if (!stationsRes.ok) throw new Error(`Erreur liste stations: ${stationsRes.status}`);
+    const stationsList = await stationsRes.json();
+
+    // Chercher par code officiel (champ "code" ou "officialStationNumber")
+    const stationMeta = stationsList.find(s =>
+      (s.code        || '').toString().trim().toUpperCase() === stCode.toUpperCase() ||
+      (s.officialStationNumber || '').toString().trim().toUpperCase() === stCode.toUpperCase() ||
+      (s.id          || '').toString().trim().toUpperCase() === stCode.toUpperCase()
     );
-    if (!searchRes.ok) throw new Error(`API ${searchRes.status}`);
-    const allStations = await searchRes.json();
 
-    // L'API retourne un tableau; chercher par code/officialStationNumber
-    const stMeta = allStations.find(s => {
-      const c1 = (s.code || '').toString().replace(/^0+/,'');
-      const c2 = (s.officialStationNumber || '').toString().replace(/^0+/,'');
-      const target = stCode.replace(/^0+/,'');
-      return c1 === target || c2 === target || (s.id||'').toUpperCase() === stCode.toUpperCase();
-    });
+    if (!stationMeta) {
+      el.innerHTML = `
+        <div class="tide-widget">
+          <div class="tide-header">Marée — ${nomEau || stCode}</div>
+          <div style="color:#aaa;font-size:11px;padding:8px 0;line-height:1.6">
+            Station <strong>${stCode}</strong> non trouvée dans l'API IWLS.<br>
+            <a href="${mareeUrl}" target="_blank" rel="noopener" style="color:var(--accent)">Consulter marees.gc.ca ↗</a>
+          </div>
+        </div>`;
+      return;
+    }
 
-    if (!stMeta) throw new Error(`Station ${stCode} introuvable`);
-    const stId  = stMeta.id;
-    const stNom = stMeta.officialName || stMeta.name || stCode;
+    const stId  = stationMeta.id;
+    const stNom = stationMeta.officialName || stationMeta.name || stCode;
 
-    // Requêtes données en parallèle
-    const fetchOpts = { mode: 'cors', headers: { 'Accept': 'application/json' } };
+    // ── 2. Données en parallèle avec l'ID interne ──────────────────
     const [hiloRes, hourlyRes, obsRes] = await Promise.all([
-      fetch(`${IWLS_BASE}/stations/${stId}/data?time-series-code=wlp-hilo&from=${fmt(now)}&to=${fmt(tPlus)}`, fetchOpts),
-      fetch(`${IWLS_BASE}/stations/${stId}/data?time-series-code=wlp&from=${fmt(now)}&to=${fmt(new Date(now.getTime()+48*3600000))}&resolution=ONE_HOUR`, fetchOpts),
-      fetch(`${IWLS_BASE}/stations/${stId}/data?time-series-code=wlo&from=${fmt(tMinus)}&to=${fmt(now)}&resolution=ONE_MINUTE`, fetchOpts).catch(()=>null)
+      fetch(`${IWLS_BASE}/stations/${stId}/data?time-series-code=wlp-hilo&from=${fmt(now)}&to=${fmt(tPlus)}`),
+      fetch(`${IWLS_BASE}/stations/${stId}/data?time-series-code=wlp&from=${fmt(now)}&to=${fmt(new Date(now.getTime() + 48*3600000))}&resolution=ONE_HOUR`),
+      fetch(`${IWLS_BASE}/stations/${stId}/data?time-series-code=wlo&from=${fmt(tMinus)}&to=${fmt(now)}&resolution=ONE_MINUTE`).catch(() => null)
     ]);
 
     const hiloData   = hiloRes.ok   ? await hiloRes.json()   : [];
@@ -1921,7 +1988,7 @@ async function loadTides(attrs, lat, lng) {
     let currentLevel = null, currentTime = null;
     if (obsRes && obsRes.ok) {
       const obsData = await obsRes.json();
-      for (let i = obsData.length-1; i >= 0; i--) {
+      for (let i = obsData.length - 1; i >= 0; i--) {
         const v = parseFloat(obsData[i].value);
         if (!isNaN(v)) { currentLevel = v; currentTime = new Date(obsData[i].eventDate); break; }
       }
@@ -1931,7 +1998,7 @@ async function loadTides(attrs, lat, lng) {
     const extrema = hiloData
       .map(d => ({ type: d.phenomenon === 'highWater' ? 'HH' : 'BM', value: parseFloat(d.value), date: new Date(d.eventDate) }))
       .filter(d => !isNaN(d.value))
-      .sort((a,b) => a.date - b.date);
+      .sort((a, b) => a.date - b.date);
 
     const nextEx = extrema.find(e => e.date > now);
     const prevEx = [...extrema].reverse().find(e => e.date <= now);
@@ -1946,168 +2013,161 @@ async function loadTides(attrs, lat, lng) {
     // Compte à rebours
     const minsLeft = nextEx ? Math.round((nextEx.date - now) / 60000) : null;
     const countdown = minsLeft != null
-      ? (minsLeft < 60 ? `dans ${minsLeft} min` : `dans ${Math.floor(minsLeft/60)} h ${minsLeft%60} min`)
+      ? (minsLeft < 60 ? `dans ${minsLeft} min` : `dans ${Math.floor(minsLeft/60)} h ${minsLeft % 60} min`)
       : '';
 
     // Graphique SVG 48 h
-    const W=290, H=70, pL=4, pR=4, pT=10, pB=6;
-    const iW=W-pL-pR, iH=H-pT-pB;
+    const W = 290, H = 70, pL = 4, pR = 4, pT = 10, pB = 6;
+    const iW = W - pL - pR, iH = H - pT - pB;
     let svgChart = '';
+
     if (hourlyData.length >= 2) {
       const vals = hourlyData.map(d => parseFloat(d.value)).filter(v => !isNaN(v));
       const minV = Math.min(...vals), maxV = Math.max(...vals);
-      const rangeV = (maxV-minV) || 0.1;
+      const rangeV = (maxV - minV) || 0.1;
       const n = hourlyData.length;
-      const toX = i => pL + (i/(n-1)) * iW;
-      const toY = v => pT + (1-(v-minV)/rangeV) * iH;
+      const toX = i => pL + (i / (n - 1)) * iW;
+      const toY = v => pT + (1 - (v - minV) / rangeV) * iH;
       const t0 = new Date(hourlyData[0].eventDate).getTime();
       const t1 = new Date(hourlyData[n-1].eventDate).getTime();
-      const nowPct = Math.max(0, Math.min(1, (now.getTime()-t0)/(t1-t0)));
-      const nowX = pL + nowPct * iW;
+      const nowPct = Math.max(0, Math.min(1, (now.getTime() - t0) / (t1 - t0)));
+      const nowX   = pL + nowPct * iW;
+
       let pathD = '';
-      for (let i=0; i<n; i++) {
-        const v = parseFloat(hourlyData[i].value); if (isNaN(v)) continue;
-        const x=toX(i), y=toY(v);
-        if (!pathD) { pathD=`M ${x} ${y}`; continue; }
-        const cpx=(toX(i-1)+x)/2;
-        pathD += ` C ${cpx} ${toY(parseFloat(hourlyData[i-1].value)||v)} ${cpx} ${y} ${x} ${y}`;
+      for (let i = 0; i < n; i++) {
+        const v = parseFloat(hourlyData[i].value);
+        if (isNaN(v)) continue;
+        const x = toX(i), y = toY(v);
+        if (!pathD) { pathD = `M ${x} ${y}`; continue; }
+        const px = toX(i-1), py = toY(parseFloat(hourlyData[i-1].value) || v);
+        const cpx = (px + x) / 2;
+        pathD += ` C ${cpx} ${py} ${cpx} ${y} ${x} ${y}`;
       }
       const areaD = pathD + ` L ${toX(n-1)} ${H-pB} L ${pL} ${H-pB} Z`;
-      const exMarkers = extrema.slice(0,8).map(ex => {
-        const tEx=ex.date.getTime(); if (tEx<t0||tEx>t1) return '';
-        const xEx=pL+((tEx-t0)/(t1-t0))*iW, yEx=toY(ex.value);
-        const col=ex.type==='HH'?'#c05b38':'#009ec2', dy=ex.type==='HH'?-5:10;
+
+      const exMarkers = extrema.slice(0, 8).map(ex => {
+        const tEx = ex.date.getTime();
+        if (tEx < t0 || tEx > t1) return '';
+        const xEx  = pL + ((tEx - t0) / (t1 - t0)) * iW;
+        const yEx  = toY(ex.value);
+        const col  = ex.type === 'HH' ? '#c05b38' : '#009ec2';
+        const dy   = ex.type === 'HH' ? -5 : 10;
         return `<circle cx="${xEx}" cy="${yEx}" r="2.5" fill="${col}" opacity="0.85"/>
                 <text x="${xEx}" y="${yEx+dy}" text-anchor="middle" font-size="6" fill="${col}" font-weight="700" font-family="Arial">${ex.type}</text>`;
       }).join('');
-      const nowIdx = Math.min(Math.round(nowPct*(n-1)), n-1);
+
+      const nowIdx = Math.min(Math.round(nowPct * (n-1)), n-1);
       const nowV = parseFloat(hourlyData[nowIdx].value);
-      const nowDotY = isNaN(nowV) ? pT+iH/2 : toY(nowV);
-      svgChart = `<svg class="tide-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="tideGrad2" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#009ec2" stop-opacity="0.22"/>
-            <stop offset="100%" stop-color="#009ec2" stop-opacity="0.02"/>
-          </linearGradient>
-          <clipPath id="tideClip2"><rect x="${pL}" y="${pT}" width="${iW}" height="${iH}"/></clipPath>
-        </defs>
-        <path d="${areaD}" fill="url(#tideGrad2)" clip-path="url(#tideClip2)"/>
-        <path d="${pathD}" fill="none" stroke="#009ec2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#tideClip2)"/>
-        ${exMarkers}
-        <line x1="${nowX}" y1="${pT}" x2="${nowX}" y2="${H-pB}" stroke="var(--brand)" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.5"/>
-        <circle cx="${nowX}" cy="${nowDotY}" r="3.5" fill="var(--brand)" opacity="0.85"/>
-        <text x="${nowX+4}" y="${pT+7}" font-size="5.5" fill="var(--brand)" font-family="Arial" opacity="0.7">Maint.</text>
-      </svg>`;
+      const nowDotY = isNaN(nowV) ? pT + iH/2 : toY(nowV);
+
+      svgChart = `
+        <svg class="tide-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="tideGrad2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#009ec2" stop-opacity="0.22"/>
+              <stop offset="100%" stop-color="#009ec2" stop-opacity="0.02"/>
+            </linearGradient>
+            <clipPath id="tideClip2"><rect x="${pL}" y="${pT}" width="${iW}" height="${iH}"/></clipPath>
+          </defs>
+          <path d="${areaD}" fill="url(#tideGrad2)" clip-path="url(#tideClip2)"/>
+          <path d="${pathD}" fill="none" stroke="#009ec2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#tideClip2)"/>
+          ${exMarkers}
+          <line x1="${nowX}" y1="${pT}" x2="${nowX}" y2="${H-pB}" stroke="var(--brand)" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.5"/>
+          <circle cx="${nowX}" cy="${nowDotY}" r="3.5" fill="var(--brand)" opacity="0.85"/>
+          <text x="${nowX+4}" y="${pT+7}" font-size="5.5" fill="var(--brand)" font-family="Arial" opacity="0.7">Maint.</text>
+        </svg>`;
     }
 
-    // Table 4 prochaines marées — layout horizontal lisible
-    const nextRows = extrema.slice(0,4).map(ex => {
-      const heure = ex.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz});
-      const date  = ex.date.toLocaleDateString('fr-CA',{weekday:'short',day:'numeric',month:'short',timeZone:tz});
-      const isPast = ex.date < now, isNext = ex === nextEx;
-      const badge = ex.type==='HH'
+    // Table 4 prochaines marées
+    const nextRows = extrema.slice(0, 4).map(ex => {
+      const heure  = ex.date.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit', timeZone: tz });
+      const date   = ex.date.toLocaleDateString('fr-CA', { weekday:'short', day:'numeric', month:'short', timeZone: tz });
+      const isPast = ex.date < now;
+      const isNext = ex === nextEx;
+      const badge  = ex.type === 'HH'
         ? `<span class="tide-badge HH">Haute mer</span>`
         : `<span class="tide-badge BM">Basse mer</span>`;
-      return `<tr style="${isPast?'opacity:.4':''}${isNext?';background:#f4faff':''}">
+      return `<tr style="${isPast ? 'opacity:.4' : ''}${isNext ? ';background:#f4faff' : ''}">
         <td>${badge}</td>
-        <td style="font-weight:700;font-size:12px;white-space:nowrap">${ex.value.toFixed(2)} m</td>
-        <td style="font-weight:600;color:#555;white-space:nowrap">${heure}${isNext&&countdown?`<br><span style="color:#bbb;font-size:8px;font-weight:400">${countdown}</span>`:''}</td>
-        <td style="color:#bbb;font-size:9px;white-space:nowrap">${date}</td>
+        <td style="font-weight:700;font-size:12px">${ex.value.toFixed(2)} m</td>
+        <td style="font-weight:600;color:#555">${heure}${isNext && countdown ? ` <span style="color:#bbb;font-size:9px">· ${countdown}</span>` : ''}</td>
+        <td style="color:#bbb;font-size:9px">${date}</td>
       </tr>`;
     }).join('');
 
-    // ── Rendu — wrapper = lien cliquable vers marees.gc.ca ────────────
     el.innerHTML = `
       <div class="tide-widget">
-        <a href="${mareeUrl}" target="_blank" rel="noopener"
-           style="${wrapStyle}"
-           onmouseover="this.style.background='rgba(0,37,105,.03)'"
-           onmouseout="this.style.background='transparent'">
+        <div class="tide-header">${nomEau || stNom}
+          <a href="${mareeUrl}" target="_blank" rel="noopener"
+             style="margin-left:6px;font-size:8px;color:var(--accent);text-decoration:none;font-weight:600;text-transform:none;letter-spacing:0">
+            marees.gc.ca ↗</a>
+        </div>
 
-          <!-- En-tête -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div class="tide-header" style="margin:0">${nomEau || stNom}</div>
-            <span style="font-size:9px;color:var(--accent);font-weight:600">marees.gc.ca ↗</span>
-          </div>
-
-          <!-- Niveau + phase sur une ligne -->
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-            ${currentLevel != null ? `
-            <div>
-              <div style="font-size:7.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:1px">
-                Niveau${currentTime?' · '+currentTime.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})+' HNA':''}
-              </div>
-              <div style="display:flex;align-items:baseline;gap:2px;line-height:1">
-                <span style="font-size:26px;font-weight:700;color:var(--ink)">${currentLevel.toFixed(2)}</span>
-                <span style="font-size:11px;color:#888">m</span>
-              </div>
-            </div>` : ''}
-            ${phaseCls ? `<span class="tide-phase ${phaseCls}">${phaseLabel}</span>` : ''}
-          </div>
-
-          <!-- Prochaine marée — une seule ligne claire -->
-          ${nextEx ? `
-          <div style="background:var(--mist);border-radius:8px;padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
-            <div style="flex:1">
-              <div style="font-size:7.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">
-                Prochaine marée${countdown?' · '+countdown:''}
-              </div>
-              <div style="display:flex;align-items:center;gap:6px">
-                ${nextEx.type==='HH'
-                  ? `<span>🔺</span><span style="font-size:13px;font-weight:700;color:#c05b38">Haute mer</span>`
-                  : `<span>🔻</span><span style="font-size:13px;font-weight:700;color:var(--accent)">Basse mer</span>`}
-              </div>
+        <!-- Niveau actuel + phase -->
+        <div style="display:flex;align-items:flex-end;gap:14px;margin:6px 0 4px">
+          ${currentLevel != null ? `
+          <div>
+            <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:1px">
+              Niveau observé${currentTime
+                ? ' · ' + currentTime.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz}) + ' HNA'
+                : ''}
             </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:18px;font-weight:700;color:var(--ink);line-height:1">${nextEx.value.toFixed(2)} <span style="font-size:11px;color:#888;font-weight:400">m</span></div>
-              <div style="font-size:13px;color:#555;font-weight:600;margin-top:2px">
-                ${nextEx.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})}
-              </div>
+            <div style="display:flex;align-items:baseline;gap:3px">
+              <span style="font-size:30px;font-weight:700;color:var(--ink);line-height:1">${currentLevel.toFixed(2)}</span>
+              <span style="font-size:12px;color:#888">m</span>
             </div>
           </div>` : ''}
+          ${phaseCls ? `<span class="tide-phase ${phaseCls}" style="margin-bottom:6px">${phaseLabel}</span>` : ''}
+        </div>
 
-          <!-- Graphique -->
-          ${svgChart ? `
-            <div style="font-size:7.5px;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Prédictions 48 h</div>
-            <div class="tide-chart-wrap">${svgChart}</div>` : ''}
-
-          <!-- Table -->
-          ${nextRows ? `
-            <table class="tide-table" style="margin-top:4px">
-              <thead><tr><th>Type</th><th>Hauteur</th><th>Heure</th><th>Date</th></tr></thead>
-              <tbody>${nextRows}</tbody>
-            </table>` : ''}
-
-          <div style="font-size:8px;color:#ccc;margin-top:6px">
-            Source : Pêches et Océans Canada — IWLS / SHC · Station ${stCode}
+        <!-- Prochaine marée -->
+        ${nextEx ? `
+        <div style="background:var(--mist);border-radius:8px;padding:8px 12px;margin-bottom:6px">
+          <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">
+            Prochaine marée${countdown ? ' · ' + countdown : ''}
           </div>
-        </a>
+          <div style="display:flex;align-items:center;gap:8px">
+            ${nextEx.type === 'HH'
+              ? `<span style="font-size:18px">🔺</span><span style="font-size:14px;font-weight:700;color:#c05b38">Haute mer — ${nextEx.value.toFixed(2)} m</span>`
+              : `<span style="font-size:18px">🔻</span><span style="font-size:14px;font-weight:700;color:var(--accent)">Basse mer — ${nextEx.value.toFixed(2)} m</span>`}
+            <span style="font-size:13px;color:#555;margin-left:auto;font-weight:700">
+              ${nextEx.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})}
+            </span>
+          </div>
+        </div>` : ''}
+
+        <!-- Graphique -->
+        ${svgChart ? `
+          <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.05em">Prédictions — 48 h</div>
+          <div class="tide-chart-wrap">${svgChart}</div>` : ''}
+
+        <!-- Table -->
+        ${nextRows ? `
+          <table class="tide-table">
+            <thead><tr><th>Type</th><th>Hauteur</th><th>Heure</th><th>Date</th></tr></thead>
+            <tbody>${nextRows}</tbody>
+          </table>` : ''}
+
+        <div style="font-size:9px;color:#ccc;margin-top:6px">
+          Source : Pêches et Océans Canada — IWLS / SHC · Station ${stCode}
+        </div>
       </div>`;
 
   } catch(err) {
     console.warn('loadTides error:', err);
-    // Fallback toujours utile : bouton direct vers marees.gc.ca
     el.innerHTML = `
       <div class="tide-widget">
-        <a href="${mareeUrl}" target="_blank" rel="noopener"
-           style="display:flex;flex-direction:column;gap:8px;text-decoration:none;color:inherit;
-                  cursor:pointer;border-radius:8px;padding:4px;transition:background .15s"
-           onmouseover="this.style.background='rgba(0,37,105,.03)'"
-           onmouseout="this.style.background='transparent'">
-          <div class="tide-header">${nomEau || stCode}</div>
-          <div style="background:var(--foam);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px">
-            <span style="font-size:28px">🌊</span>
-            <div>
-              <div style="font-size:12px;font-weight:700;color:var(--brand)">Voir les marées en direct</div>
-              <div style="font-size:10px;color:#888;margin-top:2px">Station ${stCode} · marees.gc.ca</div>
-            </div>
-            <span style="margin-left:auto;font-size:16px;color:var(--accent)">↗</span>
-          </div>
-          <div style="font-size:9px;color:#ccc">Données temporairement indisponibles</div>
-        </a>
+        <div class="tide-header">Marée${nomEau ? ' — ' + nomEau : ''}</div>
+        <div style="color:#888;font-size:11px;padding:8px 0;line-height:1.7">
+          Données de marée temporairement indisponibles.<br>
+          <a href="${mareeUrl}" target="_blank" rel="noopener"
+             style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:7px 12px;background:var(--foam);border-radius:8px;color:var(--brand);font-weight:600;text-decoration:none;font-size:11px;">
+            🌊 Voir les marées pour la station ${stCode} ↗
+          </a>
+        </div>
       </div>`;
-  }  // end catch
-}  // end loadTides
+  }
+}
 
 
 // ── Débit rivières (API CEHQ / MSP WFS) ──────────────────────────
