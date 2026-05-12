@@ -521,7 +521,7 @@
 
       /* ── Basemap bas-gauche sur mobile ── */
       #basemap-switcher {
-        bottom: 24px !important; left: 14px !important;
+        bottom: 3vh !important; left: 4% !important;
         right: auto !important;
       }
       #basemap-options { align-items: flex-start; }
@@ -568,19 +568,49 @@
       }
       .mob-select-wrap select:focus { border-color: var(--accent); }
 
-      /* ── Popup — sheet bas ── */
+      /* ── Popup mobile — sheet bas compact ── */
       #custom-popup {
         position: fixed !important;
         top: auto !important; right: 0 !important; left: 0 !important; bottom: 0 !important;
         width: 100% !important; border-radius: 20px 20px 0 0;
-        max-height: 78vh; overflow-y: auto;
+        max-height: 88vh; overflow-y: auto;
         z-index: 500; opacity: 1 !important;
         transform: translateY(100%) !important;
         transition: transform .3s cubic-bezier(.4,0,.2,1) !important;
+        display: flex; flex-direction: column;
       }
-      #custom-popup.visible {
-        transform: translateY(0) !important;
+      #custom-popup.visible { transform: translateY(0) !important; }
+
+      /* Réordonner : onglets d'abord, puis header, puis photo, puis body */
+      #popup-tabs-bar {
+        order: -3;
+        border-radius: 20px 20px 0 0;
+        background: var(--brand);
+        border-bottom: none;
+        padding: 12px 12px 0;
       }
+      .popup-tab { color: rgba(255,255,255,.55) !important; border-bottom-color: transparent !important; }
+      .popup-tab.active { color: #fff !important; border-bottom-color: var(--accent) !important; }
+
+      /* Handle pill au-dessus des onglets */
+      #popup-tabs-bar::before {
+        content: '';
+        display: block; width: 36px; height: 4px;
+        background: rgba(255,255,255,.3); border-radius: 2px;
+        margin: 0 auto 10px;
+      }
+
+      .popup-header { order: -2; }
+      .popup-photo-wrap { order: -1; height: 160px; }
+
+      /* Sur mobile : l'onglet Info montre tout (desc + grille + services + bouton) dans le body */
+      .popup-body { padding: 10px 14px 16px; }
+      .popup-desc { max-height: 54px; font-size: 11.5px; }
+      .popup-grid { gap: 5px; margin-bottom: 8px; }
+      .popup-stat { padding: 6px 8px; }
+      .popup-stat-label { font-size: 8px; }
+      .popup-stat-value { font-size: 11px; }
+      .popup-services { margin-bottom: 8px; }
 
       /* ── Contrôles carte — droite, au-dessus popup potentiel ── */
       #map-ctrl-extra {
@@ -948,46 +978,46 @@
   </div>
 
   <div id="custom-popup">
-    <div class="popup-photo-wrap" id="photo-wrap">
-      <div class="popup-photo-loading"><div class="spinner"></div></div>
+    <!-- Onglets en tête du popup -->
+    <div class="popup-tabs" id="popup-tabs-bar">
+      <button class="popup-tab active" data-tab="info">📋 Info</button>
+      <button class="popup-tab" data-tab="meteo">🌤 Météo</button>
+      <button class="popup-tab" data-tab="debit">💧 Débit</button>
+      <button class="popup-tab" data-tab="elev">⛰ Profil</button>
     </div>
-    <div class="popup-header">
-      <button class="popup-close" id="popup-close-btn">✕</button>
-      <div class="popup-route" id="popup-route"></div>
-      <div class="popup-title" id="popup-title"></div>
+
+    <!-- Pane Info : photo + header + tous les champs + bouton -->
+    <div id="pane-info" class="popup-tab-pane active">
+      <div class="popup-photo-wrap" id="photo-wrap">
+        <div class="popup-photo-loading"><div class="spinner"></div></div>
+      </div>
+      <div class="popup-header">
+        <button class="popup-close" id="popup-close-btn">✕</button>
+        <div class="popup-route" id="popup-route"></div>
+        <div class="popup-title" id="popup-title"></div>
+      </div>
+      <div class="popup-body">
+        <div class="popup-desc"    id="popup-desc"></div>
+        <div class="popup-grid"    id="popup-grid"></div>
+        <div class="popup-services" id="popup-services" style="display:none"></div>
+        <div class="popup-tags"    id="popup-tags"></div>
+        <div class="popup-divider" id="popup-divider"></div>
+        <a class="popup-btn" id="popup-btn" href="#" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          Voir la fiche complète
+        </a>
+      </div>
     </div>
-    <div class="popup-body">
-      <div class="popup-desc"    id="popup-desc"></div>
-      <div class="popup-grid"    id="popup-grid"></div>
-      <div class="popup-services" id="popup-services" style="display:none"></div>
-      <div class="popup-tags"    id="popup-tags"></div>
 
-      <!-- Onglets contextuels -->
-      <div class="popup-tabs" id="popup-tabs-bar">
-        <button class="popup-tab active" data-tab="info">📋 Info</button>
-        <button class="popup-tab" data-tab="meteo">🌤 Météo</button>
-        <button class="popup-tab" data-tab="debit">💧 Débit</button>
-        <button class="popup-tab" data-tab="elev">⛰ Profil</button>
-      </div>
-
-      <div id="pane-info" class="popup-tab-pane active">
-        <div style="padding:0 0 12px 0">
-          <div class="popup-divider" id="popup-divider"></div>
-          <a class="popup-btn" id="popup-btn" href="#" target="_blank" rel="noopener">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-            Voir la fiche complète
-          </a>
-        </div>
-      </div>
-      <div id="pane-meteo" class="popup-tab-pane">
-        <div class="weather-widget" id="weather-content"><div class="weather-loading">Chargement météo…</div></div>
-      </div>
-      <div id="pane-debit" class="popup-tab-pane">
-        <div class="flow-widget" id="flow-content"><div class="flow-loading">Chargement débit…</div></div>
-      </div>
-      <div id="pane-elev" class="popup-tab-pane">
-        <div class="elev-widget" id="elev-content"><div class="elev-loading">Chargement profil…</div></div>
-      </div>
+    <!-- Autres panes -->
+    <div id="pane-meteo" class="popup-tab-pane">
+      <div class="weather-widget" id="weather-content"><div class="weather-loading">Chargement météo…</div></div>
+    </div>
+    <div id="pane-debit" class="popup-tab-pane">
+      <div class="flow-widget" id="flow-content"><div class="flow-loading">Chargement débit…</div></div>
+    </div>
+    <div id="pane-elev" class="popup-tab-pane">
+      <div class="elev-widget" id="elev-content"><div class="elev-loading">Chargement profil…</div></div>
     </div>
   </div>
 </div>
