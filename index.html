@@ -1808,6 +1808,20 @@ function applyFilters() {
   const resetEl = document.getElementById('filter-reset-btn');
   if (resetEl) resetEl.style.display = hasFilter ? 'inline' : 'none';
   resetBtn.classList.toggle('visible', hasFilter);
+
+  // ── Zoom automatique sur les résultats filtrés ─────────────────
+  if (hasFilter && visibleFeatures.length > 0 && arcgisView && sectionLayer) {
+    const ids = [...new Set(visibleFeatures.map(f => f.attributes.ID_SECTN).filter(id => id != null))];
+    const where = ids.length > 0 ? `ID_SECTN IN (${ids.join(',')})` : '1=0';
+    sectionLayer.queryExtent({ where, outSpatialReference: arcgisView.spatialReference })
+      .then(result => {
+        if (result && result.extent) {
+          arcgisView.goTo(result.extent.expand(1.25), { duration: 700 });
+        }
+      }).catch(() => {});
+  } else if (!hasFilter && arcgisView && initialExtent) {
+    arcgisView.goTo(initialExtent, { duration: 600 });
+  }
 }
 
 ['f-niveau','f-region','f-duree','f-milieu','f-trajet'].forEach(id => {
@@ -3183,7 +3197,7 @@ require([
     },
     navigation: {
       mouseWheelZoomEnabled: true,
-      browserTouchPanEnabled: false  // ArcGIS gère lui-même le pinch — NE PAS déléguer au navigateur
+      browserTouchPanEnabled: true  // délègue le pan au navigateur → 1 doigt suffit
     }
   });
 
