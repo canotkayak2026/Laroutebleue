@@ -705,20 +705,6 @@
           <select id="f-region"><option value="">Toutes les régions</option></select>
         </div>
       </div>
-      <div class="filter-toggles">
-        <label class="filter-toggle-item" id="ftog-locat">
-          <div class="ftoggle" id="ftog-locat-sw"></div>
-          <span>Location d'équipement</span>
-        </label>
-        <label class="filter-toggle-item" id="ftog-gratuit">
-          <div class="ftoggle" id="ftog-gratuit-sw"></div>
-          <span>Parcours non payant</span>
-        </label>
-        <label class="filter-toggle-item" id="ftog-ouvert">
-          <div class="ftoggle" id="ftog-ouvert-sw"></div>
-          <span>Disponible seulement</span>
-        </label>
-      </div>
     </div>
   </div>
 
@@ -956,15 +942,17 @@ function getCourseauLabel(val) {
   return null; // Lac, Estuaire, Mer, etc. → on signale que ça ne s'applique pas
 }
 
-// Champs à récupérer (tous les champs pertinents de la couche)
+// Champs à récupérer — calés exactement sur la structure de la couche RB_Section_Web_pts
 const OUT_FIELDS = [
-  'OBJECTID','NOM','NOM_RTE_BLEUE','NO_SECTN','ID_SECTN','ID_PARCR',
-  'DESCR','NOTE','DUREE','LONGU','TYPE_TRAJET',
+  'OBJECTID','ID_PARCR','ID_SECTN','NO_SECTN',
+  'NOM_RTE_BLEUE','NOM','DESCR','NOTE',
+  'DUREE','DUREE_H','LONGU','TYPE_TRAJET',
   'NIV_DIFFI','NIV_CLASS_GEN','TYPE_MILIEUX','TYPE_ZONE',
-  'ETAT_SECTION','TARIF','LOCAT','NAVETT','SERV_GUID',
-  'URL_FICHE_RB','NO_REG_TOURST','NOM_PLAN_EAU','MUNIC',
   'DEBIT_MIN','DEBIT_MAX',
-  'TYPE_COURS_EAU','NO_STATION_CEHQ'
+  'URL_FICHE_RB',
+  'NO_REG_ADM','NO_REG_TOURST',
+  'NOM_PLAN_EAU','TYPE_COURS_EAU','IND_QUALT_EAU',
+  'NOM_RB_MINI','NO_STATION_CEHQ'
 ].join(',');
 
 // Valeurs du domaine TYPE_COURS_EAU considérées comme milieu marin (marée)
@@ -1090,7 +1078,6 @@ resetBtn.addEventListener('click', () => {
   searchInput.dispatchEvent(new Event('input'));
   // Effacer les filtres du panneau
   ['f-niveau','f-region','f-duree','f-milieu','f-trajet'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-  ['locat','gratuit','ouvert'].forEach(k => { filterState[k]=false; const sw=document.getElementById(`ftog-${k}-sw`); if(sw) sw.classList.remove('on'); });
   filterState.niveau=filterState.region=filterState.duree=filterState.milieu=filterState.trajet='';
   const filterDot = document.getElementById('filter-dot'); if(filterDot) filterDot.classList.remove('visible');
   const filterResetEl = document.getElementById('filter-reset-btn'); if(filterResetEl) filterResetEl.style.display='none';
@@ -1334,13 +1321,12 @@ function buildSidebar(features) {
         ? `<img src="${iconSrc}" alt="${MILIEU_LBL[milieu] || milieu}" onerror="this.style.display='none'"/>`
         : '🛶';
 
-      // Chips de la liste
+      // Chips de la liste — uniquement les champs présents dans la couche
       const chips = [];
       if (p.LONGU)      chips.push({ label:`${p.LONGU} km`, cls:'' });
-      if (p.DUREE)      chips.push({ label: DUREE_LBL[p.DUREE] || p.DUREE, cls:'' });
+      if (p.DUREE_H)    chips.push({ label: p.DUREE_H, cls:'' });
+      else if (p.DUREE) chips.push({ label: DUREE_LBL[p.DUREE] || p.DUREE, cls:'' });
       if (p.NIV_DIFFI)  chips.push({ label: DIFFI_LBL[p.NIV_DIFFI] || p.NIV_DIFFI, cls:`diff-${p.NIV_DIFFI}` });
-      if (p.ETAT_SECTION === 'F') chips.push({ label:'Fermé', cls:'chip-ferme' });
-      if (p.TARIF === '1')        chips.push({ label:'Payant', cls:'chip-payant' });
 
       const chipsHTML = chips.map(c => `<span class="chip ${c.cls}">${c.label}</span>`).join('');
 
@@ -1433,15 +1419,17 @@ async function showPopup(attrs, lat, lng) {
 
   // Grille de stats
   const stats = [];
-  if (attrs.LONGU)         stats.push({ label:'Distance', value:`${attrs.LONGU} km` });
-  if (attrs.DUREE)         stats.push({ label:'Durée', value: DUREE_LBL[attrs.DUREE] || attrs.DUREE });
-  if (attrs.NIV_DIFFI)     stats.push({ label:'Difficulté', value: DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI });
-  if (attrs.TYPE_TRAJET)   stats.push({ label:'Trajet', value: TRAJET_LBL[attrs.TYPE_TRAJET] || attrs.TYPE_TRAJET });
-  if (attrs.TYPE_MILIEUX)  stats.push({ label:'Milieu', value: MILIEU_LBL[attrs.TYPE_MILIEUX] || attrs.TYPE_MILIEUX });
-  if (attrs.NOM_PLAN_EAU)  stats.push({ label:"Plan d'eau", value: attrs.NOM_PLAN_EAU });
+  if (attrs.LONGU)         stats.push({ label:'Distance',        value:`${attrs.LONGU} km` });
+  if (attrs.DUREE_H)       stats.push({ label:'Durée',           value: attrs.DUREE_H });
+  else if (attrs.DUREE)    stats.push({ label:'Durée',           value: DUREE_LBL[attrs.DUREE] || attrs.DUREE });
+  if (attrs.NIV_DIFFI)     stats.push({ label:'Difficulté',      value: DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI });
+  if (attrs.NIV_CLASS_GEN) stats.push({ label:'Classe rivière',  value: attrs.NIV_CLASS_GEN });
+  if (attrs.TYPE_TRAJET)   stats.push({ label:'Trajet',          value: TRAJET_LBL[attrs.TYPE_TRAJET] || attrs.TYPE_TRAJET });
+  if (attrs.TYPE_MILIEUX)  stats.push({ label:'Milieu',          value: MILIEU_LBL[attrs.TYPE_MILIEUX] || attrs.TYPE_MILIEUX });
+  if (attrs.NOM_PLAN_EAU)  stats.push({ label:"Plan d'eau",      value: attrs.NOM_PLAN_EAU });
   if (attrs.DEBIT_MIN && attrs.DEBIT_MAX)
-    stats.push({ label:'Débit', value:`${attrs.DEBIT_MIN}–${attrs.DEBIT_MAX} m³/s` });
-  if (attrs.MUNIC)         stats.push({ label:'Municipalité', value: attrs.MUNIC });
+    stats.push({ label:'Débit recommandé', value:`${attrs.DEBIT_MIN}–${attrs.DEBIT_MAX} m³/s` });
+  if (attrs.IND_QUALT_EAU) stats.push({ label:"Qualité de l'eau", value: attrs.IND_QUALT_EAU });
   if (attrs.TYPE_COURS_EAU !== undefined && attrs.TYPE_COURS_EAU !== null) {
     const ceauLabel = getCourseauLabel(attrs.TYPE_COURS_EAU);
     stats.push({ label:"Type de cours d'eau", value: ceauLabel || '—' });
@@ -1453,19 +1441,14 @@ async function showPopup(attrs, lat, lng) {
       <div class="popup-stat-value">${s.value}</div>
     </div>`).join('');
 
-  // Tags de statut / services
+  // Tags de statut / services — uniquement les champs réellement présents dans la couche
   const tags = [];
-  if (attrs.ETAT_SECTION === 'O') tags.push({ label:'✓ Ouvert',         cls:'tag-green' });
-  if (attrs.ETAT_SECTION === 'F') tags.push({ label:'🔒 Fermé',         cls:'tag-red'   });
-  if (attrs.TARIF   === '1')      tags.push({ label:'💰 Payant',        cls:'tag-warn'  });
-  if (attrs.LOCAT   === '1')      tags.push({ label:'📍 Location',      cls:''          });
-  if (attrs.NAVETT  === '1')      tags.push({ label:'🚌 Navette',       cls:''          });
-  if (attrs.SERV_GUID === '1')    tags.push({ label:'🧭 Guidé',         cls:''          });
+  // (ETAT_SECTION, TARIF, LOCAT, NAVETT, SERV_GUID absents de la couche parcours)
 
   elTags.innerHTML = tags.map(t => `<span class="popup-tag ${t.cls}">${t.label}</span>`).join('');
   elTags.style.display = tags.length ? 'flex' : 'none';
 
-  // Bouton fiche
+  // Bouton fiche — URL_FICHE_RB est le seul champ URL dans la couche
   const popupBtn = document.getElementById('popup-btn');
   const popupDivider = document.getElementById('popup-divider');
   if (attrs.URL_FICHE_RB) {
@@ -1537,7 +1520,7 @@ function renderPhoto() {
 }
 
 // ── Panneau de filtres ───────────────────────────────────────────
-const filterState = { niveau:'', region:'', duree:'', milieu:'', trajet:'', locat:false, gratuit:false, ouvert:false };
+const filterState = { niveau:'', region:'', duree:'', milieu:'', trajet:'' };
 
 function populateRegionSelect() {
   const sel = document.getElementById('f-region');
@@ -1554,9 +1537,6 @@ function buildDefinitionExpression() {
   if (filterState.duree)   parts.push(`DUREE = '${filterState.duree}'`);
   if (filterState.milieu)  parts.push(`TYPE_MILIEUX = '${filterState.milieu}'`);
   if (filterState.trajet)  parts.push(`TYPE_TRAJET = '${filterState.trajet}'`);
-  if (filterState.locat)   parts.push(`LOCAT = '1'`);
-  if (filterState.gratuit) parts.push(`TARIF <> '1'`);
-  if (filterState.ouvert)  parts.push(`ETAT_SECTION = 'O'`);
   return parts.length ? parts.join(' AND ') : '';
 }
 
@@ -1588,10 +1568,7 @@ function applyFilters() {
       (!filterState.region  || code === filterState.region) &&
       (!filterState.duree   || p.DUREE === filterState.duree) &&
       (!filterState.milieu  || p.TYPE_MILIEUX === filterState.milieu) &&
-      (!filterState.trajet  || p.TYPE_TRAJET === filterState.trajet) &&
-      (!filterState.locat   || p.LOCAT === '1') &&
-      (!filterState.gratuit || p.TARIF !== '1') &&
-      (!filterState.ouvert  || p.ETAT_SECTION === 'O');
+      (!filterState.trajet  || p.TYPE_TRAJET === filterState.trajet);
     item.style.display = pass ? '' : 'none';
     if (pass) { visCount++; visibleFeatures.push(f); }
   });
@@ -1630,12 +1607,12 @@ function applyFilters() {
 
   // Filtrer les lignes par ID_SECTN des points visibles (les champs de filtre n'existent pas dans sectionLayer)
   if (sectionLayer) {
-    const hasFilter = !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert);
+    const hasFilter = !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet);
     sectionLayer.definitionExpression = hasFilter ? buildSectionExpression(visibleFeatures) : '';
   }
 
   // Indicateur actif
-  const hasFilter = !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert);
+  const hasFilter = !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet);
   document.getElementById('filter-dot').classList.toggle('visible', hasFilter);
   const resetEl = document.getElementById('filter-reset-btn');
   if (resetEl) resetEl.style.display = hasFilter ? 'inline' : 'none';
@@ -1647,23 +1624,12 @@ function applyFilters() {
   document.getElementById(id).addEventListener('change', e => {
     filterState[key] = e.target.value;
     applyFilters();
-    resetBtn.classList.toggle('visible', !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert));
-  });
-});
-
-['locat','gratuit','ouvert'].forEach(key => {
-  const sw = document.getElementById(`ftog-${key}-sw`);
-  document.getElementById(`ftog-${key}`).addEventListener('click', () => {
-    filterState[key] = !filterState[key];
-    sw.classList.toggle('on', filterState[key]);
-    applyFilters();
-    resetBtn.classList.toggle('visible', !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert));
+    resetBtn.classList.toggle('visible', !!(filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet));
   });
 });
 
 document.getElementById('filter-reset-btn').addEventListener('click', () => {
   ['f-niveau','f-region','f-duree','f-milieu','f-trajet'].forEach(id => document.getElementById(id).value='');
-  ['locat','gratuit','ouvert'].forEach(k => { filterState[k]=false; document.getElementById(`ftog-${k}-sw`).classList.remove('on'); });
   filterState.niveau=filterState.region=filterState.duree=filterState.milieu=filterState.trajet='';
   // Effacer les filtres carte
   if (arcgisLayer)  arcgisLayer.definitionExpression  = '';
@@ -1824,9 +1790,9 @@ async function fetchWeather(lat, lng) {
 async function loadWeather(lat, lng) {
   const el = document.getElementById('weather-content');
   el.innerHTML = '<div class="weather-loading">Chargement météo…</div>';
-  // MétéoMédia : prendre la première municipalité du champ MUNIC
-  const munic = (lastPopupAttrs && lastPopupAttrs.MUNIC)
-    ? lastPopupAttrs.MUNIC.split(/[,&]/)[0].trim()
+  // MétéoMédia : utiliser le nom du plan d'eau ou le nom du parcours pour construire l'URL
+  const munic = (lastPopupAttrs && (lastPopupAttrs.NOM_PLAN_EAU || lastPopupAttrs.NOM))
+    ? (lastPopupAttrs.NOM_PLAN_EAU || lastPopupAttrs.NOM).split(/[,&]/)[0].trim()
     : '';
   const municSlug = munic
     .toLowerCase()
@@ -2116,10 +2082,10 @@ async function loadTides(attrs, lat, lng) {
   }
 }
 
-// ── Débit rivières (API MSP WFS) ─────────────────────────────────
-// L'API MSP retourne directement : station, fournisseur_url (lien graphique
-// CEHQ), dern_valeur_deb (débit m³/s), dern_valeur_niv (niveau m),
-// description (nom station), dern_date_prise_valeur_utc.
+// ── Débit rivières (API CEHQ / MSP WFS) ──────────────────────────
+// Seule la station assignée dans NO_STATION_CEHQ est utilisée.
+// Pas de fallback géographique — si aucune station n'est assignée,
+// on affiche un message clair sans inventer une station proche.
 async function loadFlow(attrs, lat, lng) {
   const el = document.getElementById('flow-content');
   const dmin = attrs.DEBIT_MIN, dmax = attrs.DEBIT_MAX;
@@ -2127,59 +2093,47 @@ async function loadFlow(attrs, lat, lng) {
 
   el.innerHTML = `<div class="flow-loading">Recherche station hydrométrique…</div>`;
 
-  // Numéro de station explicite dans la couche (priorité absolue)
+  // Numéro de station assigné dans la couche (seule source valide)
   const stCodeCEHQ = (attrs.NO_STATION_CEHQ || '').trim();
 
-  // ── 1. Fetch API MSP GeoJSON ────────────────────────────────────
-  let graphUrl  = stCodeCEHQ
-    ? `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${stCodeCEHQ}`
-    : 'https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm';
-  let realValue = null, realUnit = null, realDate = null;
-  let stationNom = '', stationDist = null, stationNo = stCodeCEHQ || null;
+  // Si aucune station assignée → message clair, on s'arrête ici
+  if (!stCodeCEHQ) {
+    el.innerHTML = `
+      <div class="flow-widget">
+        <div class="flow-header">Débit${nomEau ? ' — ' + nomEau : ''}</div>
+        <div style="color:#aaa;font-size:11px;padding:8px 0;line-height:1.5">
+          Aucune station hydrométrique assignée à ce parcours.
+        </div>
+        <a href="https://www.cehq.gouv.qc.ca/atlas-hydroclimatique/stations-hydrometriques/index.htm"
+           target="_blank" rel="noopener"
+           style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;">
+          📈 Atlas CEHQ ↗
+        </a>
+      </div>`;
+    return;
+  }
 
+  const graphUrl = `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${stCodeCEHQ}`;
+  let realValue = null, realUnit = null, realDate = null;
+  let stationNom = '', stationNo = stCodeCEHQ;
+
+  // ── Fetch temps réel via API MSP WFS ───────────────────────────
   try {
     const wfsUrl = 'https://geoegl.msp.gouv.qc.ca/apis/mapserver-vigilance/ws/vigilance.fcgi' +
       '?service=wfs&version=1.1.0&request=getfeature&typename=stations_igo2_public&outputformat=geojson&srsname=EPSG:4326';
     const res  = await fetch(wfsUrl);
     const data = await res.json();
 
-    let best = null;
+    // Chercher uniquement par numéro de station exact (assigné dans la couche)
+    const match = data.features.find(f =>
+      String(f.properties.station || '').trim().toUpperCase() === stCodeCEHQ.toUpperCase()
+    ) || null;
 
-    if (stCodeCEHQ) {
-      // ── Priorité : chercher par numéro de station exact ──────────
-      best = data.features.find(f =>
-        String(f.properties.station || '').trim().toUpperCase() === stCodeCEHQ.toUpperCase()
-      ) || null;
-      if (best) stationDist = null; // distance non pertinente : station choisie explicitement
-    }
-
-    if (!best) {
-      // ── Fallback : station la plus proche géographiquement ────────
-      const toRad = d => d * Math.PI / 180;
-      let minDist = Infinity;
-      for (const feat of data.features) {
-        const [sLng, sLat] = feat.geometry.coordinates;
-        const dLat = toRad(sLat - lat), dLon = toRad(sLng - lng);
-        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat))*Math.cos(toRad(sLat))*Math.sin(dLon/2)**2;
-        const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        if (dist < minDist) { minDist = dist; best = feat; }
-      }
-      if (best) stationDist = minDist;
-    }
-
-    if (best) {
-      const p = best.properties;
-      stationNo  = p.station || stationNo;
+    if (match) {
+      const p = match.properties;
       stationNom = p.description || p.plan_deau || '';
 
-      // URL graphique CEHQ
-      if (p.fournisseur_url && p.fournisseur_url.includes('cehq')) {
-        graphUrl = p.fournisseur_url;
-      } else if (stationNo) {
-        graphUrl = `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${stationNo}`;
-      }
-
-      // Valeur temps réel — débit en priorité, sinon niveau
+      // Débit en priorité, sinon niveau
       const deb = parseFloat(p.dern_valeur_deb);
       const niv = parseFloat(p.dern_valeur_niv);
       if (!isNaN(deb) && p.dern_valeur_deb !== null && p.dern_valeur_deb !== '') {
@@ -2188,14 +2142,13 @@ async function loadFlow(attrs, lat, lng) {
         realValue = niv; realUnit = 'm';
       }
 
-      // Heure de la mesure
       if (p.dern_date_prise_valeur_utc) {
         const d = new Date(p.dern_date_prise_valeur_utc.replace(' ', 'T') + 'Z');
         const hne = new Date(d.getTime() - 4 * 3600000);
         realDate = hne.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit' });
       }
     }
-  } catch(e) { /* silencieux */ }
+  } catch(e) { /* silencieux — on affiche quand même le lien CEHQ */ }
 
   // ── 4. Cas sans plage recommandée ──────────────────────────────
   if (!dmin && !dmax) {
@@ -2207,9 +2160,7 @@ async function loadFlow(attrs, lat, lng) {
           <span class="flow-unit">${realUnit || ''}</span>
         </div>
         <div style="font-size:9px;color:#bbb;margin-bottom:8px">
-          ${realDate ? realDate + ' HNE' : ''}${stationNom ? ' · ' + stationNom : ''}
-        ${stationDist != null ? ` · ${stationDist.toFixed(1)} km` : ''}
-        ${stCodeCEHQ && !stationDist ? ' · station assignée' : ''}
+          ${realDate ? realDate + ' HNE' : ''}${stationNom ? ' · ' + stationNom : ''}${stCodeCEHQ ? ' · #' + stCodeCEHQ : ''}
         </div>` : `
         <div style="padding:8px 0;font-size:11px;color:#888">Aucune plage recommandée pour ce parcours.</div>`}
       <a href="${graphUrl}" target="_blank"
@@ -2248,7 +2199,7 @@ async function loadFlow(attrs, lat, lng) {
   let realHtml = '';
   if (realValue != null) {
     const valFmt = Number.isInteger(realValue) ? realValue : realValue.toFixed(2);
-    const stNote = [stationNom, stationDist != null ? `${stationDist.toFixed(1)} km` : (stCodeCEHQ ? 'station assignée' : '')].filter(Boolean).join(' · ');
+    const stNote = [stationNom, stCodeCEHQ ? `#${stCodeCEHQ}` : ''].filter(Boolean).join(' · ');
     realHtml = `
       <div style="background:var(--mist);border-radius:8px;padding:8px 10px;margin-top:6px">
         <div style="font-size:8.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px">
@@ -2615,9 +2566,6 @@ function buildShareUrl() {
   if (filterState.duree)    params.set('duree', filterState.duree);
   if (filterState.milieu)   params.set('milieu', filterState.milieu);
   if (filterState.trajet)   params.set('trajet', filterState.trajet);
-  if (filterState.locat)    params.set('locat', '1');
-  if (filterState.gratuit)  params.set('gratuit', '1');
-  if (filterState.ouvert)   params.set('ouvert', '1');
   if (arcgisView) {
     params.set('zoom', Math.round(arcgisView.zoom));
     params.set('lat',  arcgisView.center.latitude.toFixed(4));
@@ -2649,9 +2597,6 @@ function restoreFromUrl() {
   if (params.has('duree'))   { filterState.duree   = params.get('duree');   const el = document.getElementById('f-duree');   if(el) el.value = filterState.duree; }
   if (params.has('milieu'))  { filterState.milieu  = params.get('milieu');  const el = document.getElementById('f-milieu');  if(el) el.value = filterState.milieu; }
   if (params.has('trajet'))  { filterState.trajet  = params.get('trajet');  const el = document.getElementById('f-trajet');  if(el) el.value = filterState.trajet; }
-  if (params.get('locat')   === '1') { filterState.locat   = true; document.getElementById('ftog-locat-sw')?.classList.add('on'); }
-  if (params.get('gratuit') === '1') { filterState.gratuit = true; document.getElementById('ftog-gratuit-sw')?.classList.add('on'); }
-  if (params.get('ouvert')  === '1') { filterState.ouvert  = true; document.getElementById('ftog-ouvert-sw')?.classList.add('on'); }
   // On appliquera les filtres + OID après le chargement des features (dans arcgisView.when)
 }
 restoreFromUrl();
@@ -2786,7 +2731,7 @@ function buildProximityList() {
   proxList.innerHTML = nearby.map(({ f, dist }) => {
     const p = f.attributes;
     const nom = p.NOM || p.NOM_RTE_BLEUE || '–';
-    const rb  = p.NOM_RTE_BLEUE && p.NOM_RTE_BLEUE !== nom ? p.NOM_RTE_BLEUE : (p.MUNIC || '');
+    const rb  = p.NOM_RTE_BLEUE && p.NOM_RTE_BLEUE !== nom ? p.NOM_RTE_BLEUE : (p.NOM_PLAN_EAU || '');
     const milieu = MILIEU_LBL[p.TYPE_MILIEUX] || '';
     return `<div class="proximity-item" data-oid="${p.OBJECTID}">
       <div class="proximity-dist">${dist.toFixed(1)} km</div>
@@ -3032,7 +2977,7 @@ require([
 
     // Restaurer l'état depuis l'URL
     const urlParams = new URLSearchParams(location.search);
-    const hasFilters = filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet||filterState.locat||filterState.gratuit||filterState.ouvert;
+    const hasFilters = filterState.niveau||filterState.region||filterState.duree||filterState.milieu||filterState.trajet;
     if (hasFilters) applyFilters();
     if (urlParams.has('zoom') && urlParams.has('lat') && urlParams.has('lng')) {
       arcgisView.goTo({ center: [parseFloat(urlParams.get('lng')), parseFloat(urlParams.get('lat'))], zoom: parseInt(urlParams.get('zoom')) }, { duration: 0 });
