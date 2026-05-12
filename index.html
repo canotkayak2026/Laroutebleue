@@ -979,8 +979,7 @@ const OUT_FIELDS = [
   'URL_FICHE_RB',
   'NO_REG_ADM','NO_REG_TOURST',
   'NOM_PLAN_EAU','TYPE_COURS_EAU','IND_QUALT_EAU',
-  'NOM_RB_MINI','NO_STATION_CEHQ',
-  'TARIF','STAT_LAVAGE','LOCATION','SERV_GUID','NAVETTE'
+  'NOM_RB_MINI','NO_STATION_CEHQ'
 ].join(',');
 
 // Valeurs du domaine TYPE_COURS_EAU considérées comme milieu marin (marée)
@@ -1151,9 +1150,30 @@ function compensatedCenter(lng, lat) {
 }
 
 // ── Fetch paginé ─────────────────────────────────────────────────
+// Champs services — récupérés séparément car absents de certaines couches
+const SVC_FIELDS = 'TARIF,STAT_LAV,LOCAT,SERV_GUID,NAVETT';
+let svcFieldsAvailable = false; // sera vérifié au premier chargement
+
 async function fetchPaginated() {
   let features = [], offset = 0;
-  const base = `${LAYER_URL}/query?where=1%3D1&outFields=${encodeURIComponent(OUT_FIELDS)}&returnGeometry=true&outSR=4326&f=json`;
+
+  // Vérifier si les champs services existent dans la couche (une seule fois)
+  if (!svcFieldsAvailable) {
+    try {
+      const testUrl = `${LAYER_URL}/query?where=1%3D1&outFields=${SVC_FIELDS}&returnGeometry=false&resultRecordCount=1&f=json`;
+      const testRes = await fetch(testUrl);
+      const testData = await testRes.json();
+      if (!testData.error) {
+        svcFieldsAvailable = true;
+        console.log('[Services] Champs services disponibles dans la couche');
+      } else {
+        console.warn('[Services] Champs services absents de la couche:', testData.error.message);
+      }
+    } catch(e) { console.warn('[Services] Test champs services échoué:', e); }
+  }
+
+  const fieldsToFetch = svcFieldsAvailable ? OUT_FIELDS + ',' + SVC_FIELDS : OUT_FIELDS;
+  const base = `${LAYER_URL}/query?where=1%3D1&outFields=${encodeURIComponent(fieldsToFetch)}&returnGeometry=true&outSR=4326&f=json`;
   while (true) {
     const res  = await fetch(`${base}&resultOffset=${offset}&resultRecordCount=1000`);
     const data = await res.json();
@@ -1415,6 +1435,11 @@ searchInput.addEventListener('input', () => {
 
 
 // ── Popup ────────────────────────────────────────────────────────
+function statCell(label, value) {
+  if (value) return `<div class="popup-stat"><div class="popup-stat-label">${label}</div><div class="popup-stat-value">${value}</div></div>`;
+  return `<div class="popup-stat-empty"><div class="popup-stat-label">${label}</div><div class="popup-stat-value">—</div></div>`;
+}
+
 async function showPopup(attrs, lat, lng) {
   const oid = attrs.OBJECTID;
   photos = []; photoIndex = 0; currentOID = oid;
@@ -1450,18 +1475,14 @@ async function showPopup(attrs, lat, lng) {
   // Rangée 1 : Milieu | Trajet
   // Rangée 2 : Distance | Durée
   // Rangée 3 : Difficulté | Zone / Classe
-  function statCell(label, value) {
-    if (value) return `<div class="popup-stat"><div class="popup-stat-label">${label}</div><div class="popup-stat-value">${value}</div></div>`;
-    return `<div class="popup-stat-empty"><div class="popup-stat-label">${label}</div><div class="popup-stat-value">—</div></div>`;
-  }
-
   const milieu    = attrs.TYPE_MILIEUX  ? (MILIEU_LBL[attrs.TYPE_MILIEUX]  || attrs.TYPE_MILIEUX)  : null;
   const trajet    = attrs.TYPE_TRAJET   ? (TRAJET_LBL[attrs.TYPE_TRAJET]   || attrs.TYPE_TRAJET)   : null;
   const distance  = attrs.LONGU         ? `${attrs.LONGU} km`                                       : null;
   const duree     = attrs.DUREE_H       ? attrs.DUREE_H
                   : attrs.DUREE         ? (DUREE_LBL[attrs.DUREE] || attrs.DUREE)                  : null;
   const diffi     = attrs.NIV_DIFFI     ? (DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI)          : null;
-  const zoneClass = attrs.NIV_CLASS_GEN ? getClassLabel(attrs.NIV_CLASS_GEN)                        : null;
+  const zoneClass = attrs.NIV_CLASS_GEN ? getClassLabel(attrs.NIV_CLASS_GEN)
+                  : attrs.TYPE_ZONE       ? getClassLabel(attrs.TYPE_ZONE)           : null;
 
   elGrid.innerHTML =
     statCell('Milieu',      milieu)   +
@@ -1477,11 +1498,11 @@ async function showPopup(attrs, lat, lng) {
       label: 'Tarif',
       svg: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.4-.9 2.1-2.5 2.5-1.6.4-2.5 1.1-2.5 2.5a2.5 2.5 0 0 0 5 0"/></svg>`
     },
-    STAT_LAVAGE: {
+    STAT_LAV: {
       label: 'Station de lavage',
       svg: `<svg viewBox="0 0 24 24"><path d="M4 12c0-4.4 3.6-8 8-8s8 3.6 8 8"/><path d="M12 4v2M6.3 6.3l1.4 1.4M4 12h2M17.7 6.3l-1.4 1.4M20 12h-2"/><path d="M8 16c1-2 6-2 7 0"/><path d="M9 19h6"/></svg>`
     },
-    LOCATION: {
+    LOCAT: {
       label: 'Location',
       svg: `<svg viewBox="0 0 24 24"><path d="M12 22s-7-5.7-7-12a7 7 0 1 1 14 0c0 6.3-7 12-7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>`
     },
@@ -1489,13 +1510,13 @@ async function showPopup(attrs, lat, lng) {
       label: 'Service guidé',
       svg: `<svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><path d="M5.5 21v-2a6.5 6.5 0 0 1 13 0v2"/><path d="M12 11v4M10 15h4"/></svg>`
     },
-    NAVETTE: {
+    NAVETT: {
       label: 'Navette',
       svg: `<svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="10" rx="2"/><path d="M6 18v2M18 18v2"/><path d="M2 13h20"/><circle cx="7" cy="13" r="1" fill="currentColor"/><path d="M7 8V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v3"/></svg>`
     }
   };
 
-  const isOui = v => v === 'Oui' || v === 'OUI' || v === 'oui' || v === 1 || v === true || v === 'O';
+  const isOui = v => v === 'O' || v === 'Oui' || v === 'OUI' || v === 'oui' || v === 'Y' || v === 'y' || v === '1' || v === 1 || v === true;
   const activeServices = Object.entries(SVC_ICONS).filter(([key]) => isOui(attrs[key]));
 
   const elServices = document.getElementById('popup-services');
@@ -2096,62 +2117,74 @@ async function loadTides(attrs, lat, lng) {
     }).join('');
 
     el.innerHTML = `
-      <div class="tide-widget">
-        <div class="tide-header">${nomEau || stNom}
-          <a href="${mareeUrl}" target="_blank" rel="noopener"
-             style="margin-left:6px;font-size:8px;color:var(--accent);text-decoration:none;font-weight:600;text-transform:none;letter-spacing:0">
-            marees.gc.ca ↗</a>
-        </div>
+      <a href="${mareeUrl}" target="_blank" rel="noopener"
+         style="display:block;text-decoration:none;color:inherit;cursor:pointer;border-radius:10px;transition:background .15s;padding:2px;"
+         onmouseover="this.style.background='rgba(0,37,105,.03)'"
+         onmouseout="this.style.background='transparent'">
+        <div class="tide-widget">
 
-        <!-- Niveau actuel + phase -->
-        <div style="display:flex;align-items:flex-end;gap:14px;margin:6px 0 4px">
+          <!-- En-tête : nom plan d'eau + numéro station -->
+          <div class="tide-header" style="display:flex;align-items:baseline;justify-content:space-between;gap:6px">
+            <span>${nomEau || stNom}</span>
+            <span style="font-size:8px;color:#bbb;font-weight:500;text-transform:none;letter-spacing:0;white-space:nowrap">
+              Station ${stCode}
+            </span>
+          </div>
+
+          <!-- Niveau actuel + phase — sur deux lignes -->
           ${currentLevel != null ? `
-          <div>
+          <div style="margin:6px 0 4px">
             <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:1px">
               Niveau observé${currentTime
                 ? ' · ' + currentTime.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz}) + ' HNA'
                 : ''}
             </div>
-            <div style="display:flex;align-items:baseline;gap:3px">
-              <span style="font-size:30px;font-weight:700;color:var(--ink);line-height:1">${currentLevel.toFixed(2)}</span>
-              <span style="font-size:12px;color:#888">m</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="display:flex;align-items:baseline;gap:3px">
+                <span style="font-size:30px;font-weight:700;color:var(--ink);line-height:1">${currentLevel.toFixed(2)}</span>
+                <span style="font-size:12px;color:#888">m</span>
+              </div>
+              ${phaseCls ? `<span class="tide-phase ${phaseCls}">${phaseLabel}</span>` : ''}
+            </div>
+          </div>` : (phaseCls ? `<div style="margin:6px 0 4px"><span class="tide-phase ${phaseCls}">${phaseLabel}</span></div>` : '')}
+
+          <!-- Prochaine marée — type sur ligne 1, heure + countdown sur ligne 2 -->
+          ${nextEx ? `
+          <div style="background:var(--mist);border-radius:8px;padding:8px 12px;margin-bottom:6px">
+            <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">
+              Prochaine marée
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <!-- Ligne 1 : flèche + type + hauteur -->
+              <div style="display:flex;align-items:center;gap:7px">
+                ${nextEx.type === 'HH'
+                  ? `<svg width="16" height="16" viewBox="0 0 16 16" style="flex-shrink:0"><polygon points="8,2 14,14 2,14" fill="#c05b38"/></svg>
+                     <span style="font-size:15px;font-weight:700;color:#c05b38">Haute mer</span>
+                     <span style="font-size:15px;font-weight:700;color:#c05b38;margin-left:auto">${nextEx.value.toFixed(2)} m</span>`
+                  : `<svg width="16" height="16" viewBox="0 0 16 16" style="flex-shrink:0"><polygon points="8,14 14,2 2,2" fill="var(--accent)"/></svg>
+                     <span style="font-size:15px;font-weight:700;color:var(--accent)">Basse mer</span>
+                     <span style="font-size:15px;font-weight:700;color:var(--accent);margin-left:auto">${nextEx.value.toFixed(2)} m</span>`}
+              </div>
+              <!-- Ligne 2 : heure + countdown -->
+              <div style="display:flex;align-items:center;gap:6px;padding-left:23px">
+                <span style="font-size:13px;font-weight:700;color:#444">
+                  ${nextEx.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})}
+                </span>
+                ${countdown ? `<span style="font-size:10px;color:#aaa">· dans ${countdown}</span>` : ''}
+              </div>
             </div>
           </div>` : ''}
-          ${phaseCls ? `<span class="tide-phase ${phaseCls}" style="margin-bottom:6px">${phaseLabel}</span>` : ''}
-        </div>
 
-        <!-- Prochaine marée -->
-        ${nextEx ? `
-        <div style="background:var(--mist);border-radius:8px;padding:8px 12px;margin-bottom:6px">
-          <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">
-            Prochaine marée${countdown ? ' · ' + countdown : ''}
+          <!-- Graphique -->
+          ${svgChart ? `
+            <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.05em">Prédictions — 48 h</div>
+            <div class="tide-chart-wrap">${svgChart}</div>` : ''}
+
+          <div style="font-size:9px;color:#ccc;margin-top:6px">
+            Source : Pêches et Océans Canada — IWLS / SHC
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            ${nextEx.type === 'HH'
-              ? `<span style="font-size:18px">🔺</span><span style="font-size:14px;font-weight:700;color:#c05b38">Haute mer — ${nextEx.value.toFixed(2)} m</span>`
-              : `<span style="font-size:18px">🔻</span><span style="font-size:14px;font-weight:700;color:var(--accent)">Basse mer — ${nextEx.value.toFixed(2)} m</span>`}
-            <span style="font-size:13px;color:#555;margin-left:auto;font-weight:700">
-              ${nextEx.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})}
-            </span>
-          </div>
-        </div>` : ''}
-
-        <!-- Graphique -->
-        ${svgChart ? `
-          <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.05em">Prédictions — 48 h</div>
-          <div class="tide-chart-wrap">${svgChart}</div>` : ''}
-
-        <!-- Table -->
-        ${nextRows ? `
-          <table class="tide-table">
-            <thead><tr><th>Type</th><th>Hauteur</th><th>Heure</th><th>Date</th></tr></thead>
-            <tbody>${nextRows}</tbody>
-          </table>` : ''}
-
-        <div style="font-size:9px;color:#ccc;margin-top:6px">
-          Source : Pêches et Océans Canada — IWLS / SHC · Station ${stCode}
         </div>
-      </div>`;
+      </a>`;
 
   } catch(err) {
     console.warn('loadTides error:', err);
@@ -2861,16 +2894,44 @@ if (proxCloseBtn) {
   });
 }
 
+// userDot HTML conservé pour compatibilité mais on utilise un GraphicsLayer ArcGIS
+// pour que le point suive correctement pan/zoom
+let userGfxLayer = null;
+
 function updateUserDot() {
   if (!arcgisView || userLat === null) return;
-  const pt = arcgisView.toScreen({ longitude: userLng, latitude: userLat, spatialReference: { wkid: 4326 } });
-  if (pt) {
-    userDot.style.left = pt.x + 'px';
-    userDot.style.top  = pt.y + 'px';
-    userDot.style.display = 'block';
+
+  // Cacher le div HTML (il ne suit pas le pan correctement)
+  userDot.style.display = 'none';
+
+  // Créer le layer utilisateur une seule fois
+  if (!userGfxLayer) {
+    require(['esri/layers/GraphicsLayer', 'esri/Graphic'], (GraphicsLayer, Graphic) => {
+      userGfxLayer = new GraphicsLayer({ listMode: 'hide' });
+      arcgisView.map.add(userGfxLayer);
+      _drawUserPoint(Graphic);
+    });
   } else {
-    userDot.style.display = 'none';
+    require(['esri/Graphic'], (Graphic) => _drawUserPoint(Graphic));
   }
+}
+
+function _drawUserPoint(Graphic) {
+  if (!userGfxLayer) return;
+  userGfxLayer.removeAll();
+  const geom = { type: 'point', longitude: userLng, latitude: userLat };
+  // Halo pulsé
+  userGfxLayer.add(new Graphic({ geometry: geom, symbol: {
+    type: 'simple-marker', style: 'circle',
+    color: [0, 120, 255, 0.18], size: 22,
+    outline: { color: [0, 120, 255, 0.35], width: 1.5 }
+  }}));
+  // Point central
+  userGfxLayer.add(new Graphic({ geometry: geom, symbol: {
+    type: 'simple-marker', style: 'circle',
+    color: [0, 112, 255, 1], size: 10,
+    outline: { color: [255, 255, 255], width: 2 }
+  }}));
 }
 
 geoBtn.addEventListener('click', () => {
@@ -2904,7 +2965,7 @@ geoBtn.addEventListener('click', () => {
 
     if (firstFix) {
       firstFix = false;
-      arcgisView.goTo({ center: [userLng, userLat], zoom: 10 }, { duration: 800 });
+      arcgisView.goTo({ center: [userLng, userLat], zoom: 13 }, { duration: 900 });
 
       // Afficher la section proximité
       document.getElementById('sidebar-list').style.display = 'none';
@@ -2933,7 +2994,7 @@ geoBtn.addEventListener('click', () => {
       3: 'Délai dépassé — réessaie.'
     };
     showToast(msgs[err.code] || 'Erreur de géolocalisation.');
-  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
 });
 
 // Timeout — si ArcGIS ne charge pas en 15s, afficher le message d'erreur
