@@ -855,8 +855,6 @@
       </div>
 
       <div id="pane-info" class="popup-tab-pane active">
-        <!-- Mini-jauge débit inline (si station assignée et DEBIT_MIN/MAX présents) -->
-        <div id="inline-flow-wrap" style="display:none; padding:0 0 10px 0"></div>
         <div style="padding:0 0 12px 0">
           <div class="popup-divider" id="popup-divider"></div>
           <a class="popup-btn" id="popup-btn" href="#" target="_blank" rel="noopener">
@@ -1398,197 +1396,6 @@ searchInput.addEventListener('input', () => {
   sidebarCount.textContent = `${visible} résultat${visible !== 1 ? 's' : ''}`;
 });
 
-// ── Widget inline Marée (onglet Info) ────────────────────────────
-async function renderInlineTide(attrs) {
-  const wrap = document.getElementById('inline-flow-wrap');
-  if (!wrap) return;
-  const stCode = (attrs.NO_STATION_CEHQ || '').trim();
-  if (!stCode) { wrap.style.display = 'none'; return; }
-
-  wrap.style.display = 'block';
-  wrap.innerHTML = `<div style="padding:4px 0 6px;font-size:9px;color:#bbb">Chargement marée…</div>`;
-
-  const mareeUrl = `https://marees.gc.ca/fr/stations/${stCode}`;
-  const nomEau   = attrs.NOM_PLAN_EAU || '';
-  const IWLS     = 'https://api-sine.dfo-mpo.gc.ca/api/v1';
-  const tz       = 'America/Toronto';
-
-  try {
-    const now    = new Date();
-    const tMinus = new Date(now.getTime() - 2 * 3600000);
-    const tPlus  = new Date(now.getTime() + 24 * 3600000);
-    const fmt    = d => d.toISOString().slice(0,19) + 'Z';
-
-    const [metaRes, hiloRes, obsRes] = await Promise.all([
-      fetch(`${IWLS}/stations/${stCode}`),
-      fetch(`${IWLS}/stations/${stCode}/data?time-series-code=wlp-hilo&from=${fmt(now)}&to=${fmt(tPlus)}`),
-      fetch(`${IWLS}/stations/${stCode}/data?time-series-code=wlo&from=${fmt(tMinus)}&to=${fmt(now)}&resolution=ONE_MINUTE`).catch(()=>null)
-    ]);
-
-    const meta      = metaRes.ok ? await metaRes.json() : {};
-    const stNom     = meta.officialName || meta.name || stCode;
-    const hiloData  = hiloRes.ok ? await hiloRes.json() : [];
-
-    // Niveau observé actuel
-    let currentLevel = null, currentTime = null;
-    if (obsRes && obsRes.ok) {
-      const obsData = await obsRes.json();
-      for (let i = obsData.length - 1; i >= 0; i--) {
-        const v = parseFloat(obsData[i].value);
-        if (!isNaN(v)) { currentLevel = v; currentTime = new Date(obsData[i].eventDate); break; }
-      }
-    }
-
-    // Prochaines marées
-    const extrema = hiloData
-      .map(d => ({ type: d.phenomenon === 'highWater' ? 'HH' : 'BM', value: parseFloat(d.value), date: new Date(d.eventDate) }))
-      .filter(d => !isNaN(d.value))
-      .sort((a,b) => a.date - b.date);
-
-    // Phase
-    const nextEx = extrema.find(e => e.date > now);
-    const prevEx = [...extrema].reverse().find(e => e.date <= now);
-    let phaseLabel = '—', phaseCls = '';
-    if (nextEx) {
-      if (nextEx.type === 'HH') { phaseLabel = '↑ Montante'; phaseCls = 'rising'; }
-      else                      { phaseLabel = '↓ Descendante'; phaseCls = 'falling'; }
-    } else if (prevEx) { phaseLabel = '≈ Étale'; phaseCls = 'high'; }
-
-    // Prochaine marée
-    const prochaine = nextEx
-      ? `${nextEx.type === 'HH' ? '🔺 Haute mer' : '🔻 Basse mer'} <strong>${nextEx.value.toFixed(2)} m</strong> à ${nextEx.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})}`
-      : '';
-
-    wrap.innerHTML = `
-      <div style="padding:8px 0 4px;border-top:1px solid #f0f0f0;margin-top:2px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:8.5px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.1em">Marée · ${nomEau || stNom}</span>
-          <a href="${mareeUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">marees.gc.ca ↗</a>
-        </div>
-        <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
-          ${currentLevel != null ? `
-          <div>
-            <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em">Niveau actuel${currentTime ? ' · ' + currentTime.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz}) + ' HNA' : ''}</div>
-            <div style="font-size:22px;font-weight:700;color:var(--ink);line-height:1.1">${currentLevel.toFixed(2)} <span style="font-size:11px;color:#888;font-weight:400">m</span></div>
-          </div>` : ''}
-          <div style="flex:1;min-width:0">
-            ${phaseCls ? `<span class="tide-phase ${phaseCls}" style="font-size:10px;padding:2px 8px;margin-bottom:4px;display:inline-flex">${phaseLabel}</span>` : ''}
-            ${prochaine ? `<div style="font-size:10px;color:#666;margin-top:4px">${prochaine}</div>` : ''}
-          </div>
-        </div>
-      </div>`;
-
-  } catch(e) {
-    wrap.innerHTML = `
-      <div style="padding:6px 0;font-size:10px;color:#aaa">
-        Données de marée indisponibles ·
-        <a href="${mareeUrl}" target="_blank" style="color:var(--accent)">marees.gc.ca ↗</a>
-      </div>`;
-  }
-}
-
-// ── Mini-jauge débit inline (onglet Info) ────────────────────────
-async function renderInlineFlow(attrs) {
-  const wrap = document.getElementById('inline-flow-wrap');
-  if (!wrap) return;
-
-  // Sections marée → widget marée à la place
-  if (isTidalSection(attrs)) { renderInlineTide(attrs); return; }
-
-  const dmin = attrs.DEBIT_MIN, dmax = attrs.DEBIT_MAX;
-  const stCode = (attrs.NO_STATION_CEHQ || '').trim();
-
-  // N'afficher que si plage recommandée ET station assignée
-  if (!dmin || !dmax || !stCode) { wrap.style.display = 'none'; return; }
-
-  wrap.style.display = 'block';
-  wrap.innerHTML = `<div style="padding:2px 0 6px;font-size:9px;color:#bbb;text-align:right">Chargement du débit…</div>`;
-
-  // Calcul de la jauge (même logique que loadFlow)
-  const rangeSpan  = (dmax - dmin) || dmax || 100;
-  const bufferSize = rangeSpan / 0.70;
-  const scaleMin   = dmin - bufferSize * 0.15;
-  const scaleMax   = scaleMin + bufferSize;
-  const toBarPct   = v => Math.min(98, Math.max(2, ((v - scaleMin) / (scaleMax - scaleMin)) * 100));
-  const pctMin = toBarPct(dmin);
-  const pctMax = toBarPct(dmax);
-  const graphUrl = `https://www.cehq.gouv.qc.ca/suivihydro/graphique.asp?NoStation=${stCode}`;
-
-  // Fetch temps réel
-  let flowVal = null, realDate = null, statusClass = 'ok', statusLabel = '✓ Conditions favorables';
-  try {
-    const wfsUrl = 'https://geoegl.msp.gouv.qc.ca/apis/mapserver-vigilance/ws/vigilance.fcgi' +
-      '?service=wfs&version=1.1.0&request=getfeature&typename=stations_igo2_public&outputformat=geojson&srsname=EPSG:4326';
-    const data = await (await fetch(wfsUrl)).json();
-    const match = data.features.find(f =>
-      String(f.properties.station || '').trim().toUpperCase() === stCode.toUpperCase()
-    );
-    if (match) {
-      const p = match.properties;
-      const deb = parseFloat(p.dern_valeur_deb);
-      if (!isNaN(deb) && p.dern_valeur_deb !== null && p.dern_valeur_deb !== '') {
-        flowVal = deb;
-      }
-      if (p.dern_date_prise_valeur_utc) {
-        const d = new Date(p.dern_date_prise_valeur_utc.replace(' ', 'T') + 'Z');
-        const hne = new Date(d.getTime() - 4 * 3600000);
-        realDate = hne.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit' });
-      }
-    }
-  } catch(e) { /* silencieux */ }
-
-  let pct = (pctMin + pctMax) / 2;
-  if (flowVal != null) {
-    pct = toBarPct(flowVal);
-    if      (flowVal < dmin) { statusClass = 'low';  statusLabel = '⚠ Débit trop faible'; }
-    else if (flowVal > dmax) { statusClass = 'high'; statusLabel = '⚠ Débit élevé'; }
-  }
-
-  const barColor = statusClass === 'low' ? '#e6a817' : statusClass === 'high' ? '#d94040' : 'linear-gradient(90deg,var(--accent),var(--brand))';
-  const lblColor = statusClass === 'low' ? '#e6a817' : statusClass === 'high' ? '#d94040' : 'var(--ink)';
-
-  wrap.innerHTML = `
-    <div style="padding:8px 0 4px;border-top:1px solid #f0f0f0;margin-top:2px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:8.5px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.1em">Débit en temps réel</span>
-        ${flowVal != null
-          ? `<span style="font-size:13px;font-weight:700;color:${lblColor}">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s${realDate ? `<span style="font-size:9px;font-weight:400;color:#bbb;margin-left:4px">${realDate} HNE</span>` : ''}</span>`
-          : `<a href="${graphUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">CEHQ ↗</a>`}
-      </div>
-
-      <!-- Jauge compacte -->
-      <div style="position:relative;margin-bottom:${flowVal != null ? '20px' : '4px'}">
-        <!-- Labels min/max -->
-        <div style="position:relative;height:14px;margin-bottom:2px">
-          <span style="position:absolute;left:${pctMin}%;transform:translateX(-50%);font-size:8px;color:var(--green);font-weight:700;white-space:nowrap">${dmin} m³/s</span>
-          <span style="position:absolute;left:${pctMax}%;transform:translateX(-50%);font-size:8px;color:var(--green);font-weight:700;white-space:nowrap">${dmax} m³/s</span>
-        </div>
-        <!-- Barre -->
-        <div style="height:7px;background:#e8f0fa;border-radius:4px;overflow:visible;position:relative">
-          <!-- Zone recommandée -->
-          <div style="position:absolute;left:${pctMin}%;width:${pctMax-pctMin}%;height:100%;background:rgba(45,158,107,.25);border-radius:2px;top:0"></div>
-          <!-- Barre remplie -->
-          ${flowVal != null
-            ? `<div style="height:100%;width:${pct}%;border-radius:4px;background:${barColor}"></div>`
-            : `<div style="height:100%;width:${(pctMin+pctMax)/2}%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--brand));opacity:.18"></div>`}
-          <!-- Marqueurs min/max -->
-          <div style="position:absolute;top:0;left:${pctMin}%;transform:translateX(-50%);width:2px;height:100%;background:var(--green);border-radius:1px"></div>
-          <div style="position:absolute;top:0;left:${pctMax}%;transform:translateX(-50%);width:2px;height:100%;background:var(--green);border-radius:1px"></div>
-          ${flowVal != null ? `
-          <!-- Curseur vertical -->
-          <div style="position:absolute;top:-5px;left:${pct}%;transform:translateX(-50%);width:3px;height:calc(100% + 10px);background:${lblColor};border-radius:2px;opacity:.9"></div>
-          <!-- Valeur sous le curseur -->
-          <div style="position:absolute;top:calc(100% + 5px);left:${pct}%;transform:translateX(-50%);font-size:8.5px;font-weight:700;color:${lblColor};white-space:nowrap;background:#fff;padding:0 2px;border-radius:2px">${flowVal % 1 === 0 ? flowVal : flowVal.toFixed(1)} m³/s</div>
-          ` : ''}
-        </div>
-      </div>
-
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">
-        <span class="flow-status ${statusClass}" style="font-size:9px;padding:2px 7px">${statusLabel}</span>
-        <a href="${graphUrl}" target="_blank" style="font-size:9px;color:var(--accent);text-decoration:none;font-weight:600">Graphique CEHQ ↗</a>
-      </div>
-    </div>`;
-}
 
 // ── Popup ────────────────────────────────────────────────────────
 async function showPopup(attrs, lat, lng) {
@@ -1622,28 +1429,22 @@ async function showPopup(attrs, lat, lng) {
   elDesc.style.display = desc ? 'block' : 'none';
   elDesc.textContent   = desc;
 
-  // Grille de stats
+  // Grille de stats — infos du parcours uniquement, pas de débit/marée/qualité eau
   const stats = [];
   if (attrs.LONGU)         stats.push({ label:'Distance',        value:`${attrs.LONGU} km` });
   if (attrs.DUREE_H)       stats.push({ label:'Durée',           value: attrs.DUREE_H });
   else if (attrs.DUREE)    stats.push({ label:'Durée',           value: DUREE_LBL[attrs.DUREE] || attrs.DUREE });
   if (attrs.NIV_DIFFI)     stats.push({ label:'Difficulté',      value: DIFFI_LBL[attrs.NIV_DIFFI] || attrs.NIV_DIFFI });
-  if (attrs.NIV_CLASS_GEN) stats.push({ label:'Classe rivière',  value: getClassLabel(attrs.NIV_CLASS_GEN) });
+  if (attrs.NIV_CLASS_GEN) stats.push({ label:'Classe',          value: getClassLabel(attrs.NIV_CLASS_GEN) });
   if (attrs.TYPE_TRAJET)   stats.push({ label:'Trajet',          value: TRAJET_LBL[attrs.TYPE_TRAJET] || attrs.TYPE_TRAJET });
   if (attrs.TYPE_MILIEUX)  stats.push({ label:'Milieu',          value: MILIEU_LBL[attrs.TYPE_MILIEUX] || attrs.TYPE_MILIEUX });
   if (attrs.NOM_PLAN_EAU)  stats.push({ label:"Plan d'eau",      value: attrs.NOM_PLAN_EAU });
-  if (attrs.DEBIT_MIN && attrs.DEBIT_MAX)
-    stats.push({ label:'Débit recommandé', value:`${attrs.DEBIT_MIN}–${attrs.DEBIT_MAX} m³/s` });
-  if (attrs.IND_QUALT_EAU) stats.push({ label:"Qualité de l'eau", value: attrs.IND_QUALT_EAU });
 
   elGrid.innerHTML = stats.map(s => `
     <div class="popup-stat">
       <div class="popup-stat-label">${s.label}</div>
       <div class="popup-stat-value">${s.value}</div>
     </div>`).join('');
-
-  // Mini-jauge débit inline (chargement asynchrone, non bloquant)
-  renderInlineFlow(attrs);
 
   // Tags de statut / services — uniquement les champs réellement présents dans la couche
   const tags = [];
@@ -2054,23 +1855,21 @@ async function loadWeather(lat, lng) {
 const IWLS_BASE = 'https://api-sine.dfo-mpo.gc.ca/api/v1';
 
 async function loadTides(attrs, lat, lng) {
-  const el       = document.getElementById('flow-content');
-  const stCode   = (attrs.NO_STATION_CEHQ || '').trim();   // ex. "01960"
-  const nomEau   = attrs.NOM_PLAN_EAU || attrs.NOM || '';
-  const mareeUrl = stCode
-    ? `https://marees.gc.ca/fr/stations/${stCode}`
-    : 'https://marees.gc.ca/fr/stations';
+  const el      = document.getElementById('flow-content');
+  const stCode  = (attrs.NO_STATION_CEHQ || '').trim();
+  const nomEau  = attrs.NOM_PLAN_EAU || attrs.NOM || '';
+  const mareeUrl = stCode ? `https://marees.gc.ca/fr/stations/${stCode}` : 'https://marees.gc.ca/fr/stations';
+  const tz = 'America/Toronto';
 
-  el.innerHTML = `<div class="tide-loading">Chargement des données de marée…</div>`;
+  el.innerHTML = '<div class="tide-loading">Chargement des données de marée…</div>';
 
   if (!stCode) {
     el.innerHTML = `
       <div class="tide-widget">
         <div class="tide-header">Marée</div>
         <div style="color:#aaa;font-size:11px;padding:8px 0">
-          Aucun numéro de station de marnage associé à ce parcours.<br>
-          <a href="${mareeUrl}" target="_blank" rel="noopener" style="color:var(--accent)">
-            Consulter Marées Canada ↗</a>
+          Aucun numéro de station associé à ce parcours.<br>
+          <a href="${mareeUrl}" target="_blank" rel="noopener" style="color:var(--accent)">Consulter Marées Canada ↗</a>
         </div>
       </div>`;
     return;
@@ -2078,78 +1877,56 @@ async function loadTides(attrs, lat, lng) {
 
   try {
     const now    = new Date();
-    const tMinus = new Date(now.getTime() - 2 * 3600000);   // -2 h pour obs
-    const tPlus  = new Date(now.getTime() + 7 * 24 * 3600000); // +7 j pour preds
+    const tMinus = new Date(now.getTime() - 3 * 3600000);
+    const tPlus  = new Date(now.getTime() + 48 * 3600000);
     const fmt    = d => d.toISOString().slice(0, 19) + 'Z';
 
-    // ── 1. Métadonnées de la station ────────────────────────────────
-    const metaRes = await fetch(`${IWLS_BASE}/stations/${stCode}`);
-    if (!metaRes.ok) throw new Error(`Station ${stCode} introuvable (HTTP ${metaRes.status})`);
-    const meta  = await metaRes.json();
-    const stNom = meta.officialName || meta.name || stCode;
-
-    // ── 2. Requêtes parallèles : HH/BM + horaires + observations ───
-    const [hiloRes, hourlyRes, obsRes] = await Promise.all([
-      // Prédictions HH/BM — 7 jours
+    const [metaRes, hiloRes, hourlyRes, obsRes] = await Promise.all([
+      fetch(`${IWLS_BASE}/stations/${stCode}`),
       fetch(`${IWLS_BASE}/stations/${stCode}/data?time-series-code=wlp-hilo&from=${fmt(now)}&to=${fmt(tPlus)}`),
-      // Prédictions horaires — 48 h pour le graphique
       fetch(`${IWLS_BASE}/stations/${stCode}/data?time-series-code=wlp&from=${fmt(now)}&to=${fmt(new Date(now.getTime() + 48*3600000))}&resolution=ONE_HOUR`),
-      // Observations récentes — 2 h
       fetch(`${IWLS_BASE}/stations/${stCode}/data?time-series-code=wlo&from=${fmt(tMinus)}&to=${fmt(now)}&resolution=ONE_MINUTE`).catch(() => null)
     ]);
 
-    // HH/BM
-    const hiloData   = hiloRes.ok   ? await hiloRes.json()   : [];
-    // Prédictions horaires pour le graphique
+    const meta       = metaRes.ok  ? await metaRes.json()  : {};
+    const hiloData   = hiloRes.ok  ? await hiloRes.json()  : [];
     const hourlyData = hourlyRes.ok ? await hourlyRes.json() : [];
-    // Observations
+    const stNom      = meta.officialName || meta.name || stCode;
+
+    // Niveau observé actuel
     let currentLevel = null, currentTime = null;
     if (obsRes && obsRes.ok) {
       const obsData = await obsRes.json();
-      if (obsData.length) {
-        // Prendre la dernière valeur non-nulle
-        for (let i = obsData.length - 1; i >= 0; i--) {
-          const v = parseFloat(obsData[i].value);
-          if (!isNaN(v)) {
-            currentLevel = v;
-            currentTime  = new Date(obsData[i].eventDate);
-            break;
-          }
-        }
+      for (let i = obsData.length - 1; i >= 0; i--) {
+        const v = parseFloat(obsData[i].value);
+        if (!isNaN(v)) { currentLevel = v; currentTime = new Date(obsData[i].eventDate); break; }
       }
     }
 
-    // ── 3. Extraire HH/BM (format wlp-hilo : {eventDate, value, phenomenon}) ─
-    // phenomenon : "highWater" | "lowWater"
+    // HH/BM triées
     const extrema = hiloData
-      .map(d => ({
-        type  : (d.phenomenon === 'highWater' || d.value === Math.max(...hiloData.map(x => parseFloat(x.value)))) ? 'HH' : 'BM',
-        // L'API SINE donne phenomenon directement
-        ph    : d.phenomenon,
-        value : parseFloat(d.value),
-        date  : new Date(d.eventDate)
-      }))
-      .map(d => ({
-        ...d,
-        type: d.ph === 'highWater' ? 'HH' : 'BM'
-      }))
-      .filter(d => !isNaN(d.value) && d.date > new Date(now.getTime() - 3600000))
+      .map(d => ({ type: d.phenomenon === 'highWater' ? 'HH' : 'BM', value: parseFloat(d.value), date: new Date(d.eventDate) }))
+      .filter(d => !isNaN(d.value))
       .sort((a, b) => a.date - b.date);
 
-    // ── 4. Phase actuelle (montant / descendant / étale) ────────────
-    let phaseLabel = '—', phaseCls = '';
-    // Trouver la prochaine et la précédente marée par rapport à maintenant
     const nextEx = extrema.find(e => e.date > now);
-    const prevEx = extrema.slice().reverse().find(e => e.date <= now);
-    if (nextEx) {
-      if (nextEx.type === 'HH') { phaseLabel = '↑ Montante';  phaseCls = 'rising'; }
-      else                      { phaseLabel = '↓ Descendante'; phaseCls = 'falling'; }
-    } else if (prevEx) {
-      phaseLabel = '≈ Étale'; phaseCls = 'high';
-    }
+    const prevEx = [...extrema].reverse().find(e => e.date <= now);
 
-    // ── 5. Mini-graphique SVG 48 h ─────────────────────────────────
-    const W = 290, H = 62, pL = 4, pR = 4, pT = 8, pB = 4;
+    // Phase
+    let phaseLabel = '', phaseCls = '';
+    if (nextEx) {
+      if (nextEx.type === 'HH') { phaseLabel = '↑ Montante'; phaseCls = 'rising'; }
+      else                      { phaseLabel = '↓ Descendante'; phaseCls = 'falling'; }
+    } else if (prevEx) { phaseLabel = '≈ Étale'; phaseCls = 'high'; }
+
+    // Compte à rebours
+    const minsLeft = nextEx ? Math.round((nextEx.date - now) / 60000) : null;
+    const countdown = minsLeft != null
+      ? (minsLeft < 60 ? `dans ${minsLeft} min` : `dans ${Math.floor(minsLeft/60)} h ${minsLeft % 60} min`)
+      : '';
+
+    // Graphique SVG 48 h
+    const W = 290, H = 70, pL = 4, pR = 4, pT = 10, pB = 6;
     const iW = W - pL - pR, iH = H - pT - pB;
     let svgChart = '';
 
@@ -2160,14 +1937,11 @@ async function loadTides(attrs, lat, lng) {
       const n = hourlyData.length;
       const toX = i => pL + (i / (n - 1)) * iW;
       const toY = v => pT + (1 - (v - minV) / rangeV) * iH;
-
-      // Ligne "maintenant"
       const t0 = new Date(hourlyData[0].eventDate).getTime();
       const t1 = new Date(hourlyData[n-1].eventDate).getTime();
       const nowPct = Math.max(0, Math.min(1, (now.getTime() - t0) / (t1 - t0)));
       const nowX   = pL + nowPct * iW;
 
-      // Chemin SVG lissé
       let pathD = '';
       for (let i = 0; i < n; i++) {
         const v = parseFloat(hourlyData[i].value);
@@ -2180,95 +1954,111 @@ async function loadTides(attrs, lat, lng) {
       }
       const areaD = pathD + ` L ${toX(n-1)} ${H-pB} L ${pL} ${H-pB} Z`;
 
-      // Marqueurs HH/BM sur le graphique
       const exMarkers = extrema.slice(0, 8).map(ex => {
-        const tEx  = ex.date.getTime();
+        const tEx = ex.date.getTime();
         if (tEx < t0 || tEx > t1) return '';
-        const xPct = (tEx - t0) / (t1 - t0);
-        const x    = pL + xPct * iW;
-        const y    = toY(ex.value);
-        const col  = ex.type === 'HH' ? '#c05b38' : 'var(--accent)';
+        const xEx  = pL + ((tEx - t0) / (t1 - t0)) * iW;
+        const yEx  = toY(ex.value);
+        const col  = ex.type === 'HH' ? '#c05b38' : '#009ec2';
         const dy   = ex.type === 'HH' ? -5 : 10;
-        return `<circle cx="${x}" cy="${y}" r="2.5" fill="${col}" opacity="0.85"/>
-                <text x="${x}" y="${y+dy}" text-anchor="middle" font-size="6" fill="${col}" font-weight="700" font-family="Arial">${ex.type}</text>`;
+        return `<circle cx="${xEx}" cy="${yEx}" r="2.5" fill="${col}" opacity="0.85"/>
+                <text x="${xEx}" y="${yEx+dy}" text-anchor="middle" font-size="6" fill="${col}" font-weight="700" font-family="Arial">${ex.type}</text>`;
       }).join('');
 
-      // Grille HH / BM
-      const gridHH = `<line x1="${pL}" y1="${toY(maxV)}" x2="${W-pR}" y2="${toY(maxV)}" stroke="#f5c4ae" stroke-width="0.6" stroke-dasharray="3 2"/>`;
-      const gridBM = `<line x1="${pL}" y1="${toY(minV)}" x2="${W-pR}" y2="${toY(minV)}" stroke="#b8ddef" stroke-width="0.6" stroke-dasharray="3 2"/>`;
-      const lblHH  = `<text x="${pL+1}" y="${toY(maxV)-2}" font-size="5.5" fill="#c05b38" font-family="Arial">${maxV.toFixed(2)} m</text>`;
-      const lblBM  = `<text x="${pL+1}" y="${toY(minV)+7}" font-size="5.5" fill="var(--accent)" font-family="Arial">${minV.toFixed(2)} m</text>`;
+      const nowIdx = Math.min(Math.round(nowPct * (n-1)), n-1);
+      const nowV = parseFloat(hourlyData[nowIdx].value);
+      const nowDotY = isNaN(nowV) ? pT + iH/2 : toY(nowV);
 
       svgChart = `
         <svg class="tide-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
           <defs>
-            <linearGradient id="tideGrad" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="tideGrad2" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#009ec2" stop-opacity="0.22"/>
               <stop offset="100%" stop-color="#009ec2" stop-opacity="0.02"/>
             </linearGradient>
-            <clipPath id="tideClip"><rect x="${pL}" y="${pT}" width="${iW}" height="${iH}"/></clipPath>
+            <clipPath id="tideClip2"><rect x="${pL}" y="${pT}" width="${iW}" height="${iH}"/></clipPath>
           </defs>
-          ${gridHH}${gridBM}${lblHH}${lblBM}
-          <path d="${areaD}" fill="url(#tideGrad)" clip-path="url(#tideClip)"/>
-          <path d="${pathD}" fill="none" stroke="#009ec2" stroke-width="1.8"
-                stroke-linecap="round" stroke-linejoin="round" clip-path="url(#tideClip)"/>
+          <path d="${areaD}" fill="url(#tideGrad2)" clip-path="url(#tideClip2)"/>
+          <path d="${pathD}" fill="none" stroke="#009ec2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#tideClip2)"/>
           ${exMarkers}
-          <line x1="${nowX}" y1="${pT}" x2="${nowX}" y2="${H-pB}"
-                stroke="var(--brand)" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.55"/>
-          <text x="${nowX+2}" y="${pT+6}" font-size="5.5" fill="var(--brand)"
-                font-family="Arial" opacity="0.65">Maint.</text>
+          <line x1="${nowX}" y1="${pT}" x2="${nowX}" y2="${H-pB}" stroke="var(--brand)" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.5"/>
+          <circle cx="${nowX}" cy="${nowDotY}" r="3.5" fill="var(--brand)" opacity="0.85"/>
+          <text x="${nowX+4}" y="${pT+7}" font-size="5.5" fill="var(--brand)" font-family="Arial" opacity="0.7">Maint.</text>
         </svg>`;
     }
 
-    // ── 6. Table des 6 prochaines marées ───────────────────────────
-    const tz = 'America/Toronto';
-    const nextRows = extrema.slice(0, 6).map(ex => {
-      const heure = ex.date.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit', timeZone: tz });
-      const date  = ex.date.toLocaleDateString('fr-CA', { weekday:'short', day:'numeric', month:'short', timeZone: tz });
+    // Table 4 prochaines marées
+    const nextRows = extrema.slice(0, 4).map(ex => {
+      const heure  = ex.date.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit', timeZone: tz });
+      const date   = ex.date.toLocaleDateString('fr-CA', { weekday:'short', day:'numeric', month:'short', timeZone: tz });
       const isPast = ex.date < now;
-      const badge = ex.type === 'HH'
+      const isNext = ex === nextEx;
+      const badge  = ex.type === 'HH'
         ? `<span class="tide-badge HH">Haute mer</span>`
         : `<span class="tide-badge BM">Basse mer</span>`;
-      return `<tr style="${isPast ? 'opacity:.45' : ''}">
+      return `<tr style="${isPast ? 'opacity:.4' : ''}${isNext ? ';background:#f4faff' : ''}">
         <td>${badge}</td>
-        <td style="font-weight:600">${ex.value.toFixed(2)} m</td>
-        <td style="color:#888">${heure}</td>
-        <td style="color:#999;font-size:9px">${date}</td>
+        <td style="font-weight:700;font-size:12px">${ex.value.toFixed(2)} m</td>
+        <td style="font-weight:600;color:#555">${heure}${isNext && countdown ? ` <span style="color:#bbb;font-size:9px">· ${countdown}</span>` : ''}</td>
+        <td style="color:#bbb;font-size:9px">${date}</td>
       </tr>`;
     }).join('');
 
-    // ── 7. Niveau observé ──────────────────────────────────────────
-    const levelHtml = currentLevel != null
-      ? `<div class="tide-now">
-           <span class="tide-now-val">${currentLevel.toFixed(2)}</span>
-           <span class="tide-now-unit">m</span>
-         </div>
-         <div class="tide-now-lbl">${currentTime
-           ? 'Observé à ' + currentTime.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit', timeZone: tz }) + ' HNA'
-           : 'Niveau observé'}</div>`
-      : '';
-
-    // ── 8. Rendu final ─────────────────────────────────────────────
     el.innerHTML = `
       <div class="tide-widget">
-        <div class="tide-header">Marée${nomEau ? ' — ' + nomEau : ''}</div>
-        <div class="tide-station">
-          📍 Station ${stCode} · ${stNom} ·
+        <div class="tide-header">${nomEau || stNom}
           <a href="${mareeUrl}" target="_blank" rel="noopener"
-             style="color:var(--accent);font-size:9px">marees.gc.ca ↗</a>
+             style="margin-left:6px;font-size:8px;color:var(--accent);text-decoration:none;font-weight:600;text-transform:none;letter-spacing:0">
+            marees.gc.ca ↗</a>
         </div>
-        ${levelHtml}
-        ${phaseCls ? `<span class="tide-phase ${phaseCls}">${phaseLabel}</span>` : ''}
+
+        <!-- Niveau actuel + phase -->
+        <div style="display:flex;align-items:flex-end;gap:14px;margin:6px 0 4px">
+          ${currentLevel != null ? `
+          <div>
+            <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:1px">
+              Niveau observé${currentTime
+                ? ' · ' + currentTime.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz}) + ' HNA'
+                : ''}
+            </div>
+            <div style="display:flex;align-items:baseline;gap:3px">
+              <span style="font-size:30px;font-weight:700;color:var(--ink);line-height:1">${currentLevel.toFixed(2)}</span>
+              <span style="font-size:12px;color:#888">m</span>
+            </div>
+          </div>` : ''}
+          ${phaseCls ? `<span class="tide-phase ${phaseCls}" style="margin-bottom:6px">${phaseLabel}</span>` : ''}
+        </div>
+
+        <!-- Prochaine marée -->
+        ${nextEx ? `
+        <div style="background:var(--mist);border-radius:8px;padding:8px 12px;margin-bottom:6px">
+          <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px">
+            Prochaine marée${countdown ? ' · ' + countdown : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            ${nextEx.type === 'HH'
+              ? `<span style="font-size:18px">🔺</span><span style="font-size:14px;font-weight:700;color:#c05b38">Haute mer — ${nextEx.value.toFixed(2)} m</span>`
+              : `<span style="font-size:18px">🔻</span><span style="font-size:14px;font-weight:700;color:var(--accent)">Basse mer — ${nextEx.value.toFixed(2)} m</span>`}
+            <span style="font-size:13px;color:#555;margin-left:auto;font-weight:700">
+              ${nextEx.date.toLocaleTimeString('fr-CA',{hour:'2-digit',minute:'2-digit',timeZone:tz})}
+            </span>
+          </div>
+        </div>` : ''}
+
+        <!-- Graphique -->
         ${svgChart ? `
-          <div style="font-size:9px;color:#aaa;margin-top:2px">Prédictions — 48 h</div>
+          <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:.05em">Prédictions — 48 h</div>
           <div class="tide-chart-wrap">${svgChart}</div>` : ''}
+
+        <!-- Table -->
         ${nextRows ? `
           <table class="tide-table">
             <thead><tr><th>Type</th><th>Hauteur</th><th>Heure</th><th>Date</th></tr></thead>
             <tbody>${nextRows}</tbody>
-          </table>` : '<div style="font-size:11px;color:#aaa;padding:4px 0">Prédictions non disponibles.</div>'}
-        <div style="font-size:9px;color:#ccc;margin-top:4px">
-          Source : Pêches et Océans Canada — IWLS / SHC
+          </table>` : ''}
+
+        <div style="font-size:9px;color:#ccc;margin-top:6px">
+          Source : Pêches et Océans Canada — IWLS / SHC · Station ${stCode}
         </div>
       </div>`;
 
@@ -2279,12 +2069,12 @@ async function loadTides(attrs, lat, lng) {
         <div class="tide-header">Marée${nomEau ? ' — ' + nomEau : ''}</div>
         <div style="color:#aaa;font-size:11px;padding:8px 0">
           Données indisponibles pour la station ${stCode}.<br>
-          <a href="${mareeUrl}" target="_blank" rel="noopener"
-             style="color:var(--accent)">Voir sur marees.gc.ca ↗</a>
+          <a href="${mareeUrl}" target="_blank" rel="noopener" style="color:var(--accent)">Voir sur marees.gc.ca ↗</a>
         </div>
       </div>`;
   }
 }
+
 
 // ── Débit rivières (API CEHQ / MSP WFS) ──────────────────────────
 // Seule la station assignée dans NO_STATION_CEHQ est utilisée.
