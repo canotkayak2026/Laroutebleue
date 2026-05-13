@@ -187,8 +187,7 @@
     /* Haut gauche : pills collées au bord gauche */
     .parcours-top {
       display:flex; flex-direction:column; gap:2px;
-      align-self:flex-start;
-      align-items: stretch;
+      align-items: flex-start;
     }
 
     /* Pill blanc — contour #002569, logo B SVG, texte buffé 4% à gauche */
@@ -1669,11 +1668,10 @@ function buildSidebar(features) {
               <img class="parcours-logo-b"
                    src="icons/Route_bleue_bleue.png"
                    alt="B"/>
+              <div class="parcours-rb-name">${rbLabel}</div>
             </div>
             <div class="parcours-nom-bar">
-              <img class="parcours-logo-b"
-                   src="icons/Route_bleue_bleue.png"
-                   alt=""/>
+              <div class="parcours-nom">${nom}</div>
             </div>
           </div>
           <div class="parcours-bottom">
@@ -3354,7 +3352,20 @@ require([
 ], function(Map, MapView, FeatureLayer, SimpleMarkerSymbol, SimpleRenderer, Point, GraphicsLayer, Graphic) {
 
   // ── Pin goutte épurée avec logo Route Bleue ─────────────────────
-  function makeDropSVG(pinW, hover) {
+  // logoB64 : data URI du logo blanc chargé dynamiquement
+  let _logoB64 = null;
+  async function preloadLogoB64() {
+    if (_logoB64) return _logoB64;
+    try {
+      const res = await fetch('icons/Route_bleue_blanc.png');
+      const buf = await res.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      _logoB64 = 'data:image/png;base64,' + b64;
+    } catch { _logoB64 = null; }
+    return _logoB64;
+  }
+
+  function makeDropSVG(pinW, hover, logoB64) {
     // Proportions : largeur × 1.45 de hauteur, pointe en bas
     const W = pinW;
     const H = Math.round(W * 1.45);
@@ -3389,9 +3400,9 @@ require([
                Q ${sw/2},${cy + ry * 1.1} ${sw/2},${cy} Z"
             fill="url(#rg${hover?1:0})" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>
       <!-- Logo B en blanc -->
-      <image href="icons/Route_bleue_blanc.png"
+      ${logoB64 ? `<image href="${logoB64}"
              x="${lx}" y="${ly}" width="${logoS}" height="${logoS}"
-             clip-path="url(#clip${hover?1:0})"/>
+             clip-path="url(#clip${hover?1:0})"/>` : ''}
     </svg>`;
     return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
   }
@@ -3399,19 +3410,39 @@ require([
   const PIN_W = 30,   PIN_H = Math.round(30 * 1.45);
   const PIN_WH = 38,  PIN_HH = Math.round(38 * 1.45);
 
-  const symCircle = {
+  // Créer les symboles sans logo d'abord, puis mettre à jour une fois le logo chargé
+  let symCircle = {
     type: 'picture-marker',
-    url: makeDropSVG(PIN_W, false),
+    url: makeDropSVG(PIN_W, false, null),
     width: PIN_W + 'px', height: PIN_H + 'px',
     yoffset: (PIN_H - PIN_W) / 2 + 'px'
   };
 
-  const symHover = {
+  let symHover = {
     type: 'picture-marker',
-    url: makeDropSVG(PIN_WH, true),
+    url: makeDropSVG(PIN_WH, true, null),
     width: PIN_WH + 'px', height: PIN_HH + 'px',
     yoffset: (PIN_HH - PIN_WH) / 2 + 'px'
   };
+
+  // Charger le logo et mettre à jour le renderer
+  preloadLogoB64().then(b64 => {
+    if (!b64) return;
+    symCircle = {
+      type: 'picture-marker',
+      url: makeDropSVG(PIN_W, false, b64),
+      width: PIN_W + 'px', height: PIN_H + 'px',
+      yoffset: (PIN_H - PIN_W) / 2 + 'px'
+    };
+    symHover = {
+      type: 'picture-marker',
+      url: makeDropSVG(PIN_WH, true, b64),
+      width: PIN_WH + 'px', height: PIN_HH + 'px',
+      yoffset: (PIN_HH - PIN_WH) / 2 + 'px'
+    };
+    // Mettre à jour le renderer de la couche
+    if (ptLayer) ptLayer.renderer = { type: 'simple', symbol: symCircle };
+  });
 
   const clusterConfig = {
     type: "cluster", clusterRadius: "80px",
