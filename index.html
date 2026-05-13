@@ -19,9 +19,9 @@
 
   <style>
     :root {
-      --brand:      #0a3d6b;
-      --brand-2:    #0e5494;
-      --brand-dark: #072d50;
+      --brand:      #002569;
+      --brand-2:    #003080;
+      --brand-dark: #001847;
       --accent:     #009ec2;
       --accent-2:   #5cd4ed;
       --foam:       #e5f4fb;
@@ -112,13 +112,13 @@
     #sidebar-list::-webkit-scrollbar-thumb { background:var(--ripple); border-radius:4px; }
 
     /* Groupe région — grande vignette hero */
-    .region-header { display:flex; flex-direction:column; cursor:pointer; user-select:none; border-bottom:3px solid #fff; overflow:hidden; position:relative; background:#0a3d6b; }
+    .region-header { display:flex; flex-direction:column; cursor:pointer; user-select:none; border-bottom:3px solid #fff; overflow:hidden; position:relative; background:#002569; }
     .region-header:hover .region-hero-img { transform:scale(1.04); }
 
-    .region-hero { position:relative; width:100%; height:80px; overflow:hidden; background:linear-gradient(135deg,#0a3d6b,#0e5494); }
+    .region-hero { position:relative; width:100%; height:80px; overflow:hidden; background:linear-gradient(135deg,#002569,#003080); }
     .region-hero-img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .35s ease; }
     .region-hero-overlay { position:absolute; inset:0; background:linear-gradient(to right, rgba(5,25,55,.82) 0%, rgba(5,25,55,.38) 60%, rgba(5,25,55,.15) 100%); }
-    .region-hero-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#0a3d6b,#1a6096); }
+    .region-hero-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#002569,#1a6096); }
     .region-hero-placeholder svg { width:32px; height:32px; stroke:rgba(255,255,255,.25); fill:none; stroke-width:1.5; stroke-linecap:round; }
 
     .region-hero-content { position:absolute; inset:0; display:flex; align-items:center; padding:0 14px; gap:10px; }
@@ -145,7 +145,7 @@
       overflow: hidden;
       border: 1.5px solid #c8d8ee;
       border-left: none;
-      height: 100px;
+      height: 120px;
       box-shadow: 2px 2px 8px rgba(0,37,105,.10);
       transition: box-shadow .15s, transform .12s;
     }
@@ -188,12 +188,12 @@
     .parcours-top {
       display:flex; flex-direction:column; gap:2px;
       align-self:flex-start;
-      margin-left: 0;
+      align-items: stretch;
     }
 
     /* Pill blanc — contour #002569, logo B SVG, texte buffé 4% à gauche */
     .parcours-header-rb {
-      display: inline-flex; align-items: center; gap: 5px;
+      display: flex; align-items: center; gap: 5px;
       background: rgba(255,255,255,.96);
       border: 1.5px solid #002569;
       border-left: none;
@@ -209,7 +209,7 @@
 
     /* Pill verte — même gabarit */
     .parcours-nom-bar {
-      display: inline-flex; align-items:center; gap:5px;
+      display: flex; align-items:center; gap:5px;
       background: #2a6e40;
       border-left: none;
       border-radius: 0 6px 6px 0;
@@ -933,11 +933,11 @@
 
 <div id="map-container">
   <div id="viewDiv" style="touch-action:manipulation">
-    <div id="map-error" style="display:none;position:absolute;inset:0;background:#e8f4fb;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:Montserrat,sans-serif;color:#0a3d6b;text-align:center;padding:20px;z-index:999">
+    <div id="map-error" style="display:none;position:absolute;inset:0;background:#e8f4fb;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:Montserrat,sans-serif;color:#002569;text-align:center;padding:20px;z-index:999">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#009ec2" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="#009ec2"/></svg>
       <div style="font-weight:700;font-size:14px">Carte non disponible</div>
       <div style="font-size:11px;opacity:.7">Vérifie ta connexion internet<br>et recharge la page.</div>
-      <button onclick="location.reload()" style="background:#0a3d6b;color:#fff;border:none;border-radius:20px;padding:8px 20px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:700;cursor:pointer">Recharger</button>
+      <button onclick="location.reload()" style="background:#002569;color:#fff;border:none;border-radius:20px;padding:8px 20px;font-family:Montserrat,sans-serif;font-size:11px;font-weight:700;cursor:pointer">Recharger</button>
     </div>
   </div>
 
@@ -1667,15 +1667,13 @@ function buildSidebar(features) {
           <div class="parcours-top">
             <div class="parcours-header-rb">
               <img class="parcours-logo-b"
-                   src="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.svg"
-                   alt="B" onerror="this.src='https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.png'"/>
-              <div class="parcours-rb-name">${rbLabel}</div>
+                   src="icons/Route_bleue_bleue.png"
+                   alt="B"/>
             </div>
             <div class="parcours-nom-bar">
               <img class="parcours-logo-b"
-                   src="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.svg"
-                   alt="" onerror="this.src='https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.png'"/>
-              <div class="parcours-nom">${nom}</div>
+                   src="icons/Route_bleue_bleue.png"
+                   alt=""/>
             </div>
           </div>
           <div class="parcours-bottom">
@@ -3374,7 +3372,7 @@ require([
       : 'filter:drop-shadow(0 2px 5px rgba(0,0,0,.40))';
     // Forme : ellipse en haut + triangle pointu en bas
     // Path : arc elliptique + pointe
-    const svg = `<svg xmlns="icons/Route_bleue_bleue.png" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${shadow}">
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${shadow}">
       <defs>
         <radialGradient id="rg${hover?1:0}" cx="38%" cy="32%" r="65%">
           <stop offset="0%" stop-color="${hover ? '#3860cc' : '#1240a0'}"/>
@@ -3391,10 +3389,9 @@ require([
                Q ${sw/2},${cy + ry * 1.1} ${sw/2},${cy} Z"
             fill="url(#rg${hover?1:0})" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>
       <!-- Logo B en blanc -->
-      <image href="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.svg"
+      <image href="icons/Route_bleue_blanc.png"
              x="${lx}" y="${ly}" width="${logoS}" height="${logoS}"
-             clip-path="url(#clip${hover?1:0})"
-             style="filter:brightness(0) invert(1) opacity(0.95)"/>
+             clip-path="url(#clip${hover?1:0})"/>
     </svg>`;
     return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
   }
