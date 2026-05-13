@@ -193,15 +193,13 @@
 
     /* Pill blanc — contour #002569, logo B SVG, texte buffé 4% à gauche */
     .parcours-header-rb {
-      display: flex; align-items: center; gap: 5px;
+      display: inline-flex; align-items: center; gap: 5px;
       background: rgba(255,255,255,.96);
       border: 1.5px solid #002569;
       border-left: none;
       border-radius: 0 6px 6px 0;
       padding: 3px 10px 3px 4%;
       box-shadow: 1px 1px 4px rgba(0,0,0,.18);
-      max-width: 92%;
-      min-width: 0;
     }
     .parcours-logo-b { width:14px; height:14px; flex-shrink:0; object-fit:contain; }
     .parcours-rb-name {
@@ -211,14 +209,12 @@
 
     /* Pill verte — même gabarit */
     .parcours-nom-bar {
-      display: flex; align-items:center; gap:5px;
+      display: inline-flex; align-items:center; gap:5px;
       background: #2a6e40;
       border-left: none;
       border-radius: 0 6px 6px 0;
       padding: 3px 10px 3px 4%;
       box-shadow: 1px 1px 4px rgba(0,0,0,.22);
-      max-width: 92%;
-      min-width: 0;
     }
     .parcours-nom-bar .parcours-logo-b { filter: brightness(0) invert(1); }
     .parcours-nom {
@@ -2512,69 +2508,37 @@ async function loadTides(attrs, lat, lng) {
 }
 
 
-// ── Tendance débit — fichier_donnees CEHQ (données 15 min) ──────
-async function fetchDebitTrend(stCode) {
+// ── Tendance légère : compare valeur actuelle vs il y a ~6h ─────
+// On fetch fichier_donnees.asp mais on s'arrête après ~2KB (premiers points)
+// puis on compare la valeur actuelle (WFS) avec la valeur de ~6h avant
+async function fetchTendanceDebit(stCode, valeurActuelle) {
+  if (!stCode || valeurActuelle == null) return null;
   try {
     const url = `https://www.cehq.gouv.qc.ca/suivihydro/fichier_donnees.asp?NoStation=${stCode}`;
-    const res = await fetch(url);
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 4000); // timeout 4s
+    const res  = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
     if (!res.ok) return null;
     const txt = await res.text();
-
-    // Format : "2026-05-09\t21:30\t45,688\t97,89"
-    const dataLines = txt.split('\n')
-      .map(l => l.trim())
-      .filter(l => /^\d{4}-\d{2}-\d{2}/.test(l));
-
-    // Parser le débit (colonne 4, virgule → point)
-    const pts = dataLines.map(l => {
-      const cols = l.split(/\t/);
-      if (cols.length < 4) return null;
-      const v = parseFloat(cols[3].replace(',', '.'));
-      return isNaN(v) ? null : v;
-    }).filter(v => v !== null);
-
-    if (pts.length < 4) return null;
-
-    // Données les plus récentes en premier → tendance sur 6h = 24 mesures
-    const recent   = pts.slice(0, Math.min(24, pts.length));
-    const last     = recent[0];
-    const first    = recent[recent.length - 1];
-    const delta    = last - first;
-    const pct      = first !== 0 ? (delta / first) * 100 : 0;
-    // Sparkline : 12 points dans l'ordre chronologique
-    const sparkPts = recent.filter((_, i) => i % 2 === 0).reverse();
-
-    return { pts: sparkPts, delta, pct, last };
-  } catch(e) { return null; }
-}
-
-
-function trendArrow(delta, pct) {
-  const abs = Math.abs(pct);
-  if (abs < 3)  return { arrow: '→', label: 'Stable',         color: '#888' };
-  if (delta > 0) {
-    if (abs < 15) return { arrow: '↗', label: 'En légère hausse', color: '#e6a817' };
-    return            { arrow: '↑', label: 'En hausse',         color: '#d94040' };
-  } else {
-    if (abs < 15) return { arrow: '↘', label: 'En légère baisse', color: '#4caf7d' };
-    return            { arrow: '↓', label: 'En baisse',          color: '#2196a8' };
-  }
-}
-
-function sparkline(pts, color) {
-  if (!pts || pts.length < 2) return '';
-  const min = Math.min(...pts), max = Math.max(...pts);
-  const range = max - min || 1;
-  const W = 60, H = 20;
-  const coords = pts.map((v, i) => {
-    const x = (i / (pts.length - 1)) * W;
-    const y = H - ((v - min) / range) * H;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;overflow:visible">
-    <polyline points="${coords}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="${coords.split(' ').at(-1).split(',')[0]}" cy="${coords.split(' ').at(-1).split(',')[1]}" r="2.5" fill="${color}"/>
-  </svg>`;
+    const lignes = txt.split('\n').map(l => l.trim()).filter(l => /^\d{4}-\d{2}-\d{2}/.test(l));
+    if (lignes.length < 2) return null;
+    // Ligne 0 = plus récent, on cherche ~24 lignes avant (6h à 15min/mesure)
+    const idx6h = Math.min(24, lignes.length - 1);
+    const parse = l => { const c = l.split(/\t/); return c.length >= 4 ? parseFloat(c[3].replace(',','.')) : NaN; };
+    const avant = parse(lignes[idx6h]);
+    if (isNaN(avant) || avant === 0) return null;
+    const delta = valeurActuelle - avant;
+    const pct   = (delta / avant) * 100;
+    if (Math.abs(pct) < 3)  return { arrow:'→', label:'Stable',          color:'#888' };
+    if (delta > 0)
+      return pct < 15
+        ? { arrow:'↗', label:'En hausse',         color:'#e6a817' }
+        : { arrow:'↑', label:'En forte hausse',   color:'#d94040' };
+    return pct > -15
+      ? { arrow:'↘', label:'En baisse',          color:'#4caf7d' }
+      : { arrow:'↓', label:'En forte baisse',    color:'#2196a8' };
+  } catch { return null; }
 }
 
 // ── Débit rivières (API CEHQ / MSP WFS) ──────────────────────────
@@ -2690,48 +2654,43 @@ async function loadFlow(attrs, lat, lng) {
     else if (dmax < 5) { statusClass = 'low'; statusLabel = '⚠ Débit faible'; }
   }
 
-  // ── 6. Bloc valeur temps réel ───────────────────────────────────
-  // Tendance débit (6 dernières heures)
-  const trend = await fetchDebitTrend(stCodeCEHQ);
-  const tr    = trend ? trendArrow(trend.delta, trend.pct) : null;
-  const spark  = trend ? sparkline(trend.pts, tr.color) : '';
+  // ── 6. Bloc valeur temps réel + tendance + lien CEHQ ──────────
+  const tendance = await fetchTendanceDebit(stCodeCEHQ, realValue);
 
   let realHtml = '';
   if (realValue != null) {
     const valFmt = Number.isInteger(realValue) ? realValue : realValue.toFixed(2);
-    const stNote = [stationNom, stCodeCEHQ ? `#${stCodeCEHQ}` : ''].filter(Boolean).join(' · ');
+    const stNote = [stationNom, stCodeCEHQ ? `Station #${stCodeCEHQ}` : ''].filter(Boolean).join(' · ');
+    const tendHTML = tendance
+      ? `<span style="margin-left:8px;font-size:13px;font-weight:700;color:${tendance.color}">${tendance.arrow}</span>
+         <span style="font-size:9px;font-weight:600;color:${tendance.color};margin-left:3px">${tendance.label}</span>`
+      : `<span style="font-size:9px;color:#ccc;margin-left:8px">tendance n/d</span>`;
     realHtml = `
       <div style="background:var(--mist);border-radius:8px;padding:8px 10px;margin-top:6px">
         <div style="font-size:8.5px;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">
           Débit actuel${realDate ? ' · ' + realDate + ' HNE' : ''}
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <div style="display:flex;align-items:baseline;gap:3px">
-            <span style="font-size:22px;font-weight:700;color:var(--ink)">${valFmt}</span>
-            <span style="font-size:10px;color:#888">${realUnit || ''}</span>
-          </div>
-          ${tr ? `
-          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-            ${spark}
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
-            <span style="font-size:18px;font-weight:700;color:${tr.color};line-height:1">${tr.arrow}</span>
-            <span style="font-size:8.5px;font-weight:600;color:${tr.color};white-space:nowrap">${tr.label}</span>
-            <span style="font-size:8px;color:#bbb">${trend.delta > 0 ? '+' : ''}${trend.delta.toFixed(1)} m³/s / 6h</span>
-          </div>` : ''}
+        <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap">
+          <span style="font-size:26px;font-weight:700;color:var(--ink);line-height:1">${valFmt}</span>
+          <span style="font-size:11px;color:#888;margin-left:4px;margin-right:8px">${realUnit || ''}</span>
+          ${tendHTML}
         </div>
-        ${stNote || stationNo ? `<div style="font-size:8.5px;color:#bbb;margin-top:4px">${[stNote, stationNo ? `#${stationNo}` : ''].filter(Boolean).join(' · ')}</div>` : ''}
-      </div>
-      <div style="margin-top:8px;font-size:10px;color:#aaa;line-height:1.5">
-        Débit en temps réel : <a href="${graphUrl}" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
-      </div>`;
-  } else {
-    realHtml = `
-      <div style="margin-top:8px;font-size:10px;color:#aaa;line-height:1.5">
-        Débit en temps réel : <a href="${graphUrl}" target="_blank" style="color:var(--accent)">CEHQ ↗</a>
-        ${stationNo ? `<span style="font-size:9px;color:#ccc">· #${stationNo}</span>` : ''}
+        ${stNote ? `<div style="font-size:8.5px;color:#bbb;margin-top:3px">${stNote}</div>` : ''}
       </div>`;
   }
+
+  // Grand bouton lien CEHQ — visible que la valeur soit dispo ou non
+  const cehqBtn = stCodeCEHQ ? `
+    <a href="${graphUrl}" target="_blank" rel="noopener"
+       style="display:flex;align-items:center;justify-content:space-between;
+              margin-top:10px;padding:10px 14px;border-radius:10px;
+              background:var(--brand);color:#fff;text-decoration:none;
+              font-family:'Montserrat',Arial,sans-serif;font-size:11px;font-weight:700;
+              box-shadow:0 2px 8px rgba(0,37,105,.25);transition:background .15s;"
+       onmouseover="this.style.background='#1a4db5'" onmouseout="this.style.background='var(--brand)'">
+      <span>📈 Graphique débit — CEHQ</span>
+      <span style="font-size:13px;opacity:.8">↗</span>
+    </a>` : '';
 
   el.innerHTML = `
     <div class="flow-header">Débit recommandé${nomEau ? ' — ' + nomEau : ''}</div>
@@ -2769,7 +2728,8 @@ async function loadFlow(attrs, lat, lng) {
     </div>
 
     <span class="flow-status ${statusClass}" style="margin-top:4px">${statusLabel}</span>
-    ${realHtml}`;
+    ${realHtml}
+    ${cehqBtn}`;
 }
 
 // ── Profil d'élévation (Open-Elevation API) ──────────────────────
