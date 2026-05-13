@@ -193,35 +193,37 @@
 
     /* Pill blanc — contour #002569, logo B SVG, texte buffé 4% à gauche */
     .parcours-header-rb {
-      display: inline-flex; align-items: center; gap: 5px;
+      display: flex; align-items: center; gap: 5px;
       background: rgba(255,255,255,.96);
       border: 1.5px solid #002569;
       border-left: none;
       border-radius: 0 6px 6px 0;
       padding: 3px 10px 3px 4%;
       box-shadow: 1px 1px 4px rgba(0,0,0,.18);
-      max-width: 85%;
+      max-width: 92%;
+      min-width: 0;
     }
     .parcours-logo-b { width:14px; height:14px; flex-shrink:0; object-fit:contain; }
     .parcours-rb-name {
       font-family:'Montserrat',Arial,sans-serif; font-size:10px; font-weight:700;
-      color:#002569; white-space:normal; line-height:1.2;
+      color:#002569; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
     /* Pill verte — même gabarit */
     .parcours-nom-bar {
-      display: inline-flex; align-items:center; gap:5px;
+      display: flex; align-items:center; gap:5px;
       background: #2a6e40;
       border-left: none;
       border-radius: 0 6px 6px 0;
       padding: 3px 10px 3px 4%;
       box-shadow: 1px 1px 4px rgba(0,0,0,.22);
-      max-width: 85%;
+      max-width: 92%;
+      min-width: 0;
     }
     .parcours-nom-bar .parcours-logo-b { filter: brightness(0) invert(1); }
     .parcours-nom {
       font-family:'Montserrat',Arial,sans-serif; font-size:10.5px; font-weight:700;
-      color:#fff; white-space:normal; line-height:1.2;
+      color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
     /* Bas : chips */
@@ -3393,16 +3395,66 @@ require([
   "esri/layers/GraphicsLayer","esri/Graphic"
 ], function(Map, MapView, FeatureLayer, SimpleMarkerSymbol, SimpleRenderer, Point, GraphicsLayer, Graphic) {
 
-  const symCircle = new SimpleMarkerSymbol({
-    style: 'circle', color: [0,37,105,1], size: 14,
-    outline: { color: [255,255,255], width: 2 }
-  });
+  // ── Pin goutte épurée avec logo Route Bleue ─────────────────────
+  function makeDropSVG(pinW, hover) {
+    // Proportions : largeur × 1.45 de hauteur, pointe en bas
+    const W = pinW;
+    const H = Math.round(W * 1.45);
+    const rx = W / 2;               // rayon haut = demi-largeur
+    const ry = W * 0.52;            // rayon vertical du haut (légèrement elliptique)
+    const cy = ry;                  // centre de l'ellipse en haut
+    const logoS = W * 0.58;         // taille du logo B
+    const lx = (W - logoS) / 2;
+    const ly = (ry * 2 - logoS) / 2;
+    const fill   = hover ? '#1a4db5' : '#002569';
+    const stroke = hover ? '#fff' : '#fff';
+    const sw     = hover ? 2 : 1.5;
+    const shadow = hover
+      ? 'filter:drop-shadow(0 4px 8px rgba(0,0,0,.55))'
+      : 'filter:drop-shadow(0 2px 5px rgba(0,0,0,.40))';
+    // Forme : ellipse en haut + triangle pointu en bas
+    // Path : arc elliptique + pointe
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${shadow}">
+      <defs>
+        <radialGradient id="rg${hover?1:0}" cx="38%" cy="32%" r="65%">
+          <stop offset="0%" stop-color="${hover ? '#3860cc' : '#1240a0'}"/>
+          <stop offset="100%" stop-color="${hover ? '#001e80' : '#001540'}"/>
+        </radialGradient>
+        <clipPath id="clip${hover?1:0}">
+          <ellipse cx="${rx}" cy="${cy}" rx="${rx - sw/2}" ry="${ry - sw/2}"/>
+        </clipPath>
+      </defs>
+      <!-- Corps : ellipse + pointe -->
+      <path d="M ${sw/2},${cy}
+               A ${rx-sw/2},${ry-sw/2} 0 1 1 ${W-sw/2},${cy}
+               Q ${W-sw/2},${cy + ry * 1.1} ${rx},${H - sw/2}
+               Q ${sw/2},${cy + ry * 1.1} ${sw/2},${cy} Z"
+            fill="url(#rg${hover?1:0})" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>
+      <!-- Logo B en blanc -->
+      <image href="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.svg"
+             x="${lx}" y="${ly}" width="${logoS}" height="${logoS}"
+             clip-path="url(#clip${hover?1:0})"
+             style="filter:brightness(0) invert(1) opacity(0.95)"/>
+    </svg>`;
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+  }
 
-  // Hover : légèrement plus grand + couleur plus pâle/claire
-  const symHover = new SimpleMarkerSymbol({
-    style: 'circle', color: [90,130,200,0.85], size: 18,
-    outline: { color: [255,255,255], width: 2.5 }
-  });
+  const PIN_W = 30,   PIN_H = Math.round(30 * 1.45);
+  const PIN_WH = 38,  PIN_HH = Math.round(38 * 1.45);
+
+  const symCircle = {
+    type: 'picture-marker',
+    url: makeDropSVG(PIN_W, false),
+    width: PIN_W + 'px', height: PIN_H + 'px',
+    yoffset: (PIN_H - PIN_W) / 2 + 'px'
+  };
+
+  const symHover = {
+    type: 'picture-marker',
+    url: makeDropSVG(PIN_WH, true),
+    width: PIN_WH + 'px', height: PIN_HH + 'px',
+    yoffset: (PIN_HH - PIN_WH) / 2 + 'px'
+  };
 
   const clusterConfig = {
     type: "cluster", clusterRadius: "80px",
@@ -3412,14 +3464,14 @@ require([
       symbol: { type:"text", color:"#ffffff", font:{ weight:"bold", family:"sans-serif", size:"11px" } },
       labelPlacement: "center-center"
     }],
-    symbol: { type:"simple-marker", style:"circle", color:[0,37,105,.9], size:28, outline:{ color:[255,255,255], width:2 } },
+    symbol: { type:"simple-marker", style:"circle", color:[0,37,105,.9], size:30, outline:{ color:[255,255,255], width:2 } },
     clusterMinSize: "26px", clusterMaxSize: "56px", popupEnabled: false,
-    maxScale: 150000  // désactive le clustering quand les lignes apparaissent
+    maxScale: 150000
   };
 
   arcgisLayer = new FeatureLayer({
     url: LAYER_URL, outFields:['*'], popupEnabled:false,
-    renderer: new SimpleRenderer({ symbol: symCircle }),
+    renderer: { type: 'simple', symbol: symCircle },
     featureReduction: clusterConfig,
     // Étiquettes du nom de parcours — visibles seulement au même zoom que les lignes
     labelingInfo: [{
