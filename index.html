@@ -137,16 +137,19 @@
     .region-items.hidden { display:none; }
 
     /* Item parcours */
-    /* ── Carte parcours — tout par-dessus la photo ── */
+    /* ── Carte parcours — flat gauche collé, arrondi droit ── */
     .parcours-item {
       position: relative; cursor: pointer;
-      margin: 7px 10px; border-radius: 10px; overflow: hidden;
+      margin: 5px 0 5px 0;
+      border-radius: 0 8px 8px 0;
+      overflow: hidden;
       border: 1.5px solid #c8d8ee;
+      border-left: none;
       height: 100px;
-      box-shadow: 0 1px 5px rgba(0,37,105,.08);
+      box-shadow: 2px 2px 8px rgba(0,37,105,.10);
       transition: box-shadow .15s, transform .12s;
     }
-    .parcours-item:hover { box-shadow: 0 4px 16px rgba(0,37,105,.16); transform: translateY(-1px); }
+    .parcours-item:hover { box-shadow: 3px 3px 14px rgba(0,37,105,.18); transform: translateX(2px); }
     .parcours-item.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,158,194,.35); }
 
     /* Photo en fond absolu */
@@ -178,44 +181,52 @@
       position: absolute; inset: 0; z-index: 2;
       display: flex; flex-direction: column;
       justify-content: space-between;
-      padding: 6px 8px 6px 0;
+      padding: 6px 8px 6px 0; /* pills partent du bord gauche */
     }
 
-    /* Haut gauche : pills collées au bord gauche (sortent de la carte) */
+    /* Haut gauche : pills collées au bord gauche */
     .parcours-top {
       display:flex; flex-direction:column; gap:2px;
       align-self:flex-start;
-      margin-left: -8px; /* dépasse le padding pour coller au bord */
+      margin-left: 0;
     }
 
+    /* Pill blanc — contour #002569, logo B SVG, texte buffé 4% à gauche */
     .parcours-header-rb {
       display: inline-flex; align-items: center; gap: 5px;
-      background: rgba(255,255,255,.95);
+      background: rgba(255,255,255,.96);
+      border: 1.5px solid #002569;
+      border-left: none;
       border-radius: 0 6px 6px 0;
-      padding: 3px 10px 3px 8px;
+      padding: 3px 10px 3px 4%;
       box-shadow: 1px 1px 4px rgba(0,0,0,.18);
+      max-width: 85%;
     }
     .parcours-logo-b { width:14px; height:14px; flex-shrink:0; object-fit:contain; }
     .parcours-rb-name {
       font-family:'Montserrat',Arial,sans-serif; font-size:10px; font-weight:700;
-      color:var(--brand); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      color:#002569; white-space:normal; line-height:1.2;
     }
 
+    /* Pill verte — même gabarit */
     .parcours-nom-bar {
       display: inline-flex; align-items:center; gap:5px;
       background: #2a6e40;
+      border-left: none;
       border-radius: 0 6px 6px 0;
-      padding: 3px 10px 3px 8px;
+      padding: 3px 10px 3px 4%;
       box-shadow: 1px 1px 4px rgba(0,0,0,.22);
+      max-width: 85%;
     }
     .parcours-nom-bar .parcours-logo-b { filter: brightness(0) invert(1); }
     .parcours-nom {
       font-family:'Montserrat',Arial,sans-serif; font-size:10.5px; font-weight:700;
-      color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      color:#fff; white-space:normal; line-height:1.2;
     }
 
     /* Bas : chips */
     .parcours-bottom { display:flex; flex-direction:column; gap:0; }
+
 
     .parcours-chips { display:flex; gap:3px; flex-wrap:wrap; }
     .chip {
@@ -1658,14 +1669,14 @@ function buildSidebar(features) {
           <div class="parcours-top">
             <div class="parcours-header-rb">
               <img class="parcours-logo-b"
-                   src="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.png"
-                   alt="B" onerror="this.style.display='none'"/>
+                   src="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.svg"
+                   alt="B" onerror="this.src='https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.png'"/>
               <div class="parcours-rb-name">${rbLabel}</div>
             </div>
             <div class="parcours-nom-bar">
               <img class="parcours-logo-b"
-                   src="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.png"
-                   alt="" onerror="this.style.display='none'"/>
+                   src="https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.svg"
+                   alt="" onerror="this.src='https://raw.githubusercontent.com/Laroutebleue/icons/main/Route_bleue_bleue.png'"/>
               <div class="parcours-nom">${nom}</div>
             </div>
           </div>
