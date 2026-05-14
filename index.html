@@ -1963,7 +1963,7 @@ async function showPopup(attrs, lat, lng) {
     if (mobPopup) {
       // Header style Arcade
       const region = attrs.NO_REG_TOURST
-        ? (REGION_LABELS[attrs.NO_REG_TOURST] || attrs.NO_REG_TOURST)
+        ? (REGIONS[attrs.NO_REG_TOURST] || attrs.NO_REG_TOURST)
         : (attrs.NO_REG_ADM || '');
       document.getElementById('mob-arcade-region').textContent = region.toUpperCase();
       document.getElementById('mob-arcade-rb').textContent     = (attrs.NOM_RB_MINI || attrs.NOM_RTE_BLEUE || '').toUpperCase();
