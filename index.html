@@ -670,7 +670,8 @@
 
       /* ── Popup mobile séparé ── */
       #mob-popup {
-        display: block !important;
+        display: flex !important;
+        flex-direction: column;
         position: fixed;
         bottom: 0; left: 0; right: 0; top: auto;
         width: 100%;
@@ -3832,11 +3833,6 @@ require([
     }
 
     arcgisView.on('click', handleMapClick);
-    // Sur mobile avec browserTouchPanEnabled, 'click' ne se déclenche pas toujours
-    // 'immediate-click' capte le tap avant le délai de détection de pan
-    if (window.innerWidth <= 768) {
-      arcgisView.on('immediate-click', handleMapClick);
-    }
 
     // Curseur + hover dynamique sur les points
     let hoveredGraphic = null;
