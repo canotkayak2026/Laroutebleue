@@ -666,12 +666,12 @@
       }
       .mob-select-wrap select:focus { border-color: var(--accent); }
 
-      /* ── Popup mobile — sheet bas, onglets en tête via flex order ── */
+      /* ── Popup mobile — sheet bas compact, onglets EN TÊTE ── */
       #custom-popup {
         position: fixed !important;
         top: auto !important; right: 0 !important; left: 0 !important; bottom: 0 !important;
         width: 100% !important; border-radius: 20px 20px 0 0;
-        max-height: 85vh; overflow-y: auto;
+        max-height: 72vh; overflow-y: auto;
         z-index: 500; opacity: 1 !important;
         transform: translateY(100%) !important;
         transition: transform .3s cubic-bezier(.4,0,.2,1) !important;
@@ -679,52 +679,61 @@
       }
       #custom-popup.visible { transform: translateY(0) !important; }
 
-      /* Ordre : onglets → photo → header → body */
+      /* ── Onglets : PREMIER élément visible (order 0) ── */
       #popup-tabs-bar {
         order: 0 !important;
         background: var(--brand) !important;
         border-bottom: none !important;
         border-radius: 20px 20px 0 0 !important;
-        padding: 14px 10px 8px !important;
+        padding: 12px 10px 7px !important;
         gap: 5px !important;
-        margin-bottom: 0 !important;
+        margin: 0 !important;
+        flex-shrink: 0;
       }
-      .popup-photo-wrap { order: 1 !important; height: 150px; }
-      .popup-header      { order: 2 !important; }
-      .popup-body        { order: 3 !important; padding: 10px 14px 16px; }
-
-      /* Handle drag pill */
+      /* Pill drag au-dessus des onglets */
       #popup-tabs-bar::before {
         content: '';
         display: block; width: 36px; height: 4px;
         background: rgba(255,255,255,.28); border-radius: 3px;
-        margin: 0 auto 10px;
+        margin: 0 auto 9px;
       }
-      /* Onglets pill style */
+      /* Style pill des onglets */
       .popup-tab {
         background: rgba(255,255,255,.1) !important;
-        border-radius: 9px !important;
+        border-radius: 8px !important;
         border-bottom: none !important;
         color: rgba(255,255,255,.55) !important;
         font-size: 9.5px !important;
-        padding: 7px 3px !important;
+        padding: 6px 3px !important;
         letter-spacing: .02em !important;
         margin-bottom: 0 !important;
+        transition: background .15s !important;
       }
-      .popup-tab:hover { background: rgba(255,255,255,.18) !important; }
       .popup-tab.active {
-        background: rgba(255,255,255,.2) !important;
+        background: rgba(255,255,255,.22) !important;
         color: #fff !important;
         box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.3) !important;
       }
 
-      /* Compacter les stats */
-      .popup-desc { max-height: 52px; font-size: 11.5px; }
-      .popup-grid { gap: 5px; margin-bottom: 8px; }
-      .popup-stat { padding: 6px 8px; }
-      .popup-stat-label { font-size: 8px; }
-      .popup-stat-value { font-size: 11px; }
-      .popup-services { margin-bottom: 8px; }
+      /* Photo (order 1) — compact */
+      .popup-photo-wrap { order: 1 !important; height: 110px !important; flex-shrink: 0; }
+
+      /* Header titre (order 2) — compact */
+      .popup-header { order: 2 !important; padding: 8px 36px 8px 12px !important; flex-shrink: 0; }
+      .popup-route { font-size: 8px !important; margin-bottom: 1px !important; }
+      .popup-title { font-size: 14px !important; }
+
+      /* Body contenu (order 3) — compact */
+      .popup-body { order: 3 !important; padding: 8px 12px 12px !important; }
+
+      /* Stats compactes */
+      .popup-desc { max-height: 40px; overflow: hidden; font-size: 11px; margin-bottom: 8px; }
+      .popup-grid { gap: 4px; margin-bottom: 7px; }
+      .popup-stat, .popup-stat-empty { padding: 5px 7px; }
+      .popup-stat-label { font-size: 7.5px; }
+      .popup-stat-value { font-size: 10.5px; }
+      .popup-services { margin-bottom: 7px; }
+      .svc-badge { font-size: 9px; padding: 3px 8px 3px 6px; }
 
       /* ── Contrôles carte — droite, au-dessus popup potentiel ── */
       #map-ctrl-extra {
