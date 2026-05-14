@@ -731,25 +731,22 @@
         background: var(--brand); padding: 10px 40px 0 12px;
         flex-shrink: 0; position: relative;
       }
-      #mob-arcade-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-      #mob-arcade-logo { width:30px; height:30px; object-fit:contain; flex-shrink:0; }
+      #mob-arcade-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
       #mob-arcade-region {
         font-family:'Montserrat',Arial,sans-serif; font-size:9px; font-weight:600;
-        color:rgba(255,255,255,.7); text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px;
-      }
-      #mob-arcade-rb {
-        font-family:'Montserrat',Arial,sans-serif; font-size:14px; font-weight:700; color:#fff; line-height:1.2;
+        color:rgba(255,255,255,.7); text-transform:uppercase; letter-spacing:.08em;
       }
       /* Boite blanche RB style liste */
       #mob-arcade-rb-box {
-        display:flex; align-items:center; gap:7px;
+        display:inline-flex; align-items:center; gap:6px;
         background:#fff; border:1.5px solid #002569;
-        border-radius:6px; padding:5px 10px 5px 8px;
-        margin-bottom:8px; align-self:flex-start;
+        border-radius:6px; padding:4px 10px 4px 8px;
+        margin-bottom:8px; max-width:calc(100% - 40px); box-sizing:border-box;
       }
-      #mob-arcade-rb-box img { width:18px; height:18px; object-fit:contain; }
+      #mob-arcade-rb-box img { width:16px; height:16px; object-fit:contain; flex-shrink:0; }
       #mob-arcade-rb-box span {
         font-family:'Montserrat',Arial,sans-serif; font-size:11px; font-weight:700; color:#002569;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
       }
       #mob-arcade-nom-wrap { display:inline-block; margin-bottom:10px; }
       #mob-arcade-nom {
@@ -1197,9 +1194,7 @@
     <div id="mob-arcade-header">
       <button class="popup-close" id="mob-close-btn">✕</button>
       <div id="mob-arcade-top">
-        <div>
-          <div id="mob-arcade-region"></div>
-        </div>
+        <div id="mob-arcade-region"></div>
       </div>
       <!-- Boite blanche logo B + nom RB -->
       <div id="mob-arcade-rb-box">
