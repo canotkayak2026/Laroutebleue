@@ -1882,8 +1882,9 @@ async function showPopup(attrs, lat, lng) {
     tabDebit.textContent = isTidalSection(attrs) ? '🌊 Marée' : '💧 Débit';
   }
 
-  // En-tête
-  elRoute.textContent = '';  // remplacé par rb-box
+  // En-tête desktop
+  const planEau = attrs.NOM_PLAN_EAU ? `DU ${attrs.NOM_PLAN_EAU.toUpperCase()}` : '';
+  elRoute.textContent = planEau;
   elTitle.textContent = attrs.NOM || attrs.NOM_RTE_BLEUE || 'Parcours sans nom';
   // Boite blanche RB sur desktop
   const rbBox = document.getElementById('popup-rb-box');
@@ -1988,10 +1989,13 @@ async function showPopup(attrs, lat, lng) {
       // Header style Arcade
       const region = attrs.NO_REG_TOURST
         ? (REGIONS[attrs.NO_REG_TOURST] || attrs.NO_REG_TOURST)
-        : (attrs.NO_REG_ADM || '');
-      document.getElementById('mob-arcade-region').textContent = region.toUpperCase();
-      document.getElementById('mob-arcade-rb').textContent     = (attrs.NOM_RB_MINI || attrs.NOM_RTE_BLEUE || '').toUpperCase();
-      document.getElementById('mob-arcade-nom').textContent    = (attrs.NOM || '').toUpperCase();
+        : '';
+      document.getElementById('mob-arcade-region').textContent = region ? `DE LA ${region.toUpperCase()}` : '';
+      // Boite blanche : NOM_RB_MINI ou NOM_RTE_BLEUE
+      const mobRbEl = document.getElementById('mob-arcade-rb');
+      if (mobRbEl) mobRbEl.textContent = (attrs.NOM_RB_MINI || attrs.NOM_RTE_BLEUE || '');
+      // Badge vert : nom du parcours
+      document.getElementById('mob-arcade-nom').textContent = (attrs.NOM || '').toUpperCase();
 
       // Contenu
       document.getElementById('mob-desc').textContent     = elDesc.textContent;
