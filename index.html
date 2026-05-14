@@ -730,7 +730,7 @@
 
       /* Corps info */
       .mob-info-body { padding: 8px 12px 14px; overflow-y: auto; }
-      .mob-info-body .popup-desc { font-size: 11px; max-height: 44px; overflow: hidden; margin-bottom: 7px; }
+      .mob-info-body .popup-desc { font-size: 11px; max-height: 60px; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-bottom: 7px; }
       .mob-info-body .popup-grid { gap: 4px; margin-bottom: 7px; }
       .mob-info-body .popup-stat,
       .mob-info-body .popup-stat-empty { padding: 5px 7px; }
@@ -1317,6 +1317,31 @@ function closePopup() {
   if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
 }
 closeBtn.addEventListener('click', closePopup);
+
+// ── Popup mobile : fermer + onglets ─────────────────────────────
+document.getElementById('mob-close-btn')?.addEventListener('click', closePopup);
+
+document.querySelectorAll('.mob-ptab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.mob-ptab').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.mob-pane').forEach(p => p.classList.toggle('active', p.id === `mob-pane-${tab}`));
+    // Copier le contenu des panes desktop → mobile au premier clic
+    if (tab === 'meteo') {
+      const dst = document.getElementById('mob-weather-content');
+      const src = document.getElementById('weather-content');
+      if (dst && src && dst.querySelector('.weather-loading')) dst.innerHTML = src.innerHTML;
+    } else if (tab === 'debit') {
+      const dst = document.getElementById('mob-flow-content');
+      const src = document.getElementById('flow-content');
+      if (dst && src && dst.querySelector('.flow-loading')) dst.innerHTML = src.innerHTML;
+    } else if (tab === 'elev') {
+      const dst = document.getElementById('mob-elev-content');
+      const src = document.getElementById('elev-content');
+      if (dst && src && dst.querySelector('.elev-loading')) dst.innerHTML = src.innerHTML;
+    }
+  });
+});
 
 // ── Filtre région sur la couche ArcGIS ───────────────────────────
 function filterLayerByRegion(code) {
