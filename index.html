@@ -350,6 +350,17 @@
     .popup-close { position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.15); color:rgba(255,255,255,.7); font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .2s,color .2s; }
     .popup-close:hover { background:rgba(255,255,255,.22); color:#fff; }
     .popup-route { font-family:Arial,sans-serif; font-size:9px; color:var(--accent-2); letter-spacing:.12em; text-transform:uppercase; margin-bottom:5px; opacity:.8; }
+    .popup-rb-box {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #fff; border: 1.5px solid #002569;
+      border-radius: 6px; padding: 4px 10px 4px 8px;
+      margin-bottom: 6px; max-width: 100%; box-sizing: border-box;
+    }
+    .popup-rb-box img { width:16px; height:16px; object-fit:contain; flex-shrink:0; }
+    .popup-rb-box-name {
+      font-family:'Montserrat',Arial,sans-serif; font-size:10px; font-weight:700; color:#002569;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
     .popup-title { font-family:Arial,sans-serif; color:#fff; font-size:17px; line-height:1.3; }
 
     .popup-body { padding:14px 16px; }
@@ -1136,7 +1147,7 @@
     <div class="popup-header">
       <button class="popup-close" id="popup-close-btn">✕</button>
       <div class="popup-route" id="popup-route"></div>
-      <div class="popup-rb-box" id="popup-rb-box" style="display:none">
+      <div class="popup-rb-box" id="popup-rb-box">
         <img src="icons/Route_bleue_bleue.png" alt="B" width="16" height="16" style="width:16px;height:16px;object-fit:contain;flex-shrink:0"/>
         <span class="popup-rb-box-name" id="popup-rb-box-name"></span>
       </div>
