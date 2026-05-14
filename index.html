@@ -672,7 +672,7 @@
         position: fixed !important;
         bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important;
         width: 100% !important;
-        max-height: 52vh; overflow: hidden;
+        max-height: 52vh; overflow: hidden; display: flex; flex-direction: column;
         border-radius: 20px 20px 0 0;
         background: #fff;
         z-index: 500;
@@ -712,8 +712,8 @@
       }
 
       /* Panes */
-      .mob-pane { display: none; overflow-y: auto; flex: 1; }
-      .mob-pane.active { display: flex; flex-direction: column; }
+      .mob-pane { display: none; flex: 1; min-height: 0; }
+      .mob-pane.active { display: flex; flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
       /* Photo */
       .mob-photo-wrap {
@@ -1312,6 +1312,8 @@ const resetBtn     = document.getElementById('reset-btn');
 function closePopup() {
   popup.classList.remove('visible');
   document.getElementById('mob-popup')?.classList.remove('visible');
+  // Remettre le padding à zéro → carte reprend toute la hauteur
+  if (window.innerWidth <= 768 && arcgisView) arcgisView.padding = { bottom: 0 };
   activeGeometry = null;
   clearHighlight();
   if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
@@ -3707,7 +3709,14 @@ require([
           outSpatialReference: arcgisView.spatialReference
         }).then(result => {
           if (result && result.extent) {
-            arcgisView.goTo(result.extent.expand(1.5), { duration: 600 });
+            if (window.innerWidth <= 768) {
+              // Décaler le centre vers le haut pour que le parcours reste visible au-dessus du popup
+              const popupH = window.innerHeight * 0.52;
+              arcgisView.padding = { bottom: popupH };
+              arcgisView.goTo(result.extent.expand(1.4), { duration: 600 });
+            } else {
+              arcgisView.goTo(result.extent.expand(1.5), { duration: 600 });
+            }
           }
         }).catch(() => {});
       }
