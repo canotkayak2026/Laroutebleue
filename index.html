@@ -722,10 +722,25 @@
       }
       .mob-photo-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
 
-      /* Header */
-      .mob-header {
-        background: var(--brand); padding: 7px 36px 7px 14px;
-        position: relative; flex-shrink: 0;
+      /* Header style Arcade */
+      #mob-arcade-header {
+        background: var(--brand); padding: 10px 40px 0 12px;
+        flex-shrink: 0; position: relative;
+      }
+      #mob-arcade-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+      #mob-arcade-logo { width:36px; height:36px; object-fit:contain; flex-shrink:0; }
+      #mob-arcade-region {
+        font-family:'Montserrat',Arial,sans-serif; font-size:9px; font-weight:600;
+        color:rgba(255,255,255,.7); text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px;
+      }
+      #mob-arcade-rb {
+        font-family:'Montserrat',Arial,sans-serif; font-size:15px; font-weight:700; color:#fff; line-height:1.2;
+      }
+      #mob-arcade-nom-wrap { display:inline-block; margin-bottom:10px; }
+      #mob-arcade-nom {
+        display:inline-block; background:#28873e; color:#fff;
+        font-family:'Montserrat',Arial,sans-serif; font-size:12px; font-weight:700;
+        padding:5px 14px; border-radius:10px;
       }
 
       /* Corps info */
@@ -738,6 +753,16 @@
       .mob-info-body .popup-stat-value { font-size: 10.5px; }
       .mob-info-body .popup-services { margin-bottom: 7px; }
       .mob-info-body .svc-badge { font-size: 9px; padding: 3px 8px 3px 6px; }
+
+      /* Bouton voir parcours style Arcade */
+      .mob-arcade-btn {
+        display:flex; align-items:center; justify-content:center; gap:7px;
+        width:100%; padding:12px; background:var(--brand); color:#fff;
+        font-family:'Montserrat',Arial,sans-serif; font-size:12px; font-weight:700;
+        border-radius:10px; text-decoration:none; margin-top:4px;
+        transition:background .15s; box-sizing:border-box;
+      }
+      .mob-arcade-btn:active { background:#001847; }
 
       /* ── Contrôles carte — droite, au-dessus popup potentiel ── */
       #map-ctrl-extra {
@@ -1148,25 +1173,37 @@
     <button class="mob-ptab" data-tab="debit">💧 Débit</button>
     <button class="mob-ptab" data-tab="elev">⛰ Profil</button>
   </div>
-  <!-- Pane Info : photo + header + contenu + bouton -->
+  <!-- Pane Info -->
   <div id="mob-pane-info" class="mob-pane active">
+    <!-- Header style Arcade : fond bleu, logo, région, badges -->
+    <div id="mob-arcade-header">
+      <button class="popup-close" id="mob-close-btn">✕</button>
+      <div id="mob-arcade-top">
+        <img src="icons/Route_bleue_bleue.png" id="mob-arcade-logo" alt="B"/>
+        <div>
+          <div id="mob-arcade-region"></div>
+          <div id="mob-arcade-rb"></div>
+        </div>
+      </div>
+      <div id="mob-arcade-nom-wrap">
+        <div id="mob-arcade-nom"></div>
+      </div>
+    </div>
+    <!-- Photo -->
     <div id="mob-photo-wrap" class="mob-photo-wrap">
       <div class="popup-photo-loading"><div class="spinner"></div></div>
     </div>
-    <div id="mob-header" class="mob-header">
-      <button class="popup-close" id="mob-close-btn">✕</button>
-      <div id="mob-route" class="popup-route"></div>
-      <div id="mob-title" class="popup-title"></div>
-    </div>
+    <!-- Corps -->
     <div class="mob-info-body">
       <div id="mob-desc"     class="popup-desc"></div>
       <div id="mob-grid"     class="popup-grid"></div>
       <div id="mob-services" class="popup-services" style="display:none"></div>
       <div id="mob-tags"     class="popup-tags"></div>
       <div class="popup-divider"></div>
-      <a class="popup-btn" id="mob-btn" href="#" target="_blank" rel="noopener">
+      <!-- Bouton style Arcade -->
+      <a class="mob-arcade-btn" id="mob-btn" href="#" target="_blank" rel="noopener">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-        Voir la fiche complète
+        Voir ce parcours
       </a>
     </div>
   </div>
@@ -1328,20 +1365,41 @@ document.querySelectorAll('.mob-ptab').forEach(btn => {
     const tab = btn.dataset.tab;
     document.querySelectorAll('.mob-ptab').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.mob-pane').forEach(p => p.classList.toggle('active', p.id === `mob-pane-${tab}`));
-    // Copier le contenu des panes desktop → mobile au premier clic
-    if (tab === 'meteo') {
-      const dst = document.getElementById('mob-weather-content');
-      const src = document.getElementById('weather-content');
-      if (dst && src && dst.querySelector('.weather-loading')) dst.innerHTML = src.innerHTML;
-    } else if (tab === 'debit') {
-      const dst = document.getElementById('mob-flow-content');
-      const src = document.getElementById('flow-content');
-      if (dst && src && dst.querySelector('.flow-loading')) dst.innerHTML = src.innerHTML;
-    } else if (tab === 'elev') {
-      const dst = document.getElementById('mob-elev-content');
-      const src = document.getElementById('elev-content');
-      if (dst && src && dst.querySelector('.elev-loading')) dst.innerHTML = src.innerHTML;
+
+    // Déclencher le chargement directement (même logique que les onglets desktop)
+    if (tab === 'meteo' && !weatherLoaded && lastPopupLat) {
+      weatherLoaded = true;
+      loadWeather(lastPopupLat, lastPopupLng);
     }
+    if (tab === 'debit' && !flowLoaded && lastPopupAttrs) {
+      flowLoaded = true;
+      if (isTidalSection(lastPopupAttrs)) {
+        loadTides(lastPopupAttrs, lastPopupLat, lastPopupLng);
+      } else {
+        loadFlow(lastPopupAttrs, lastPopupLat, lastPopupLng);
+      }
+    }
+    if (tab === 'elev' && !elevLoaded && lastPopupLat) {
+      elevLoaded = true;
+      loadElevation(lastPopupAttrs, lastPopupLat, lastPopupLng);
+    }
+
+    // Après chargement, copier le contenu dans les panes mobiles
+    setTimeout(() => {
+      if (tab === 'meteo') {
+        const dst = document.getElementById('mob-weather-content');
+        const src = document.getElementById('weather-content');
+        if (dst && src) dst.innerHTML = src.innerHTML;
+      } else if (tab === 'debit') {
+        const dst = document.getElementById('mob-flow-content');
+        const src = document.getElementById('flow-content');
+        if (dst && src) dst.innerHTML = src.innerHTML;
+      } else if (tab === 'elev') {
+        const dst = document.getElementById('mob-elev-content');
+        const src = document.getElementById('elev-content');
+        if (dst && src) dst.innerHTML = src.innerHTML;
+      }
+    }, 100);
   });
 });
 
@@ -1900,8 +1958,15 @@ async function showPopup(attrs, lat, lng) {
   if (window.innerWidth <= 768) {
     const mobPopup = document.getElementById('mob-popup');
     if (mobPopup) {
-      document.getElementById('mob-route').textContent    = elRoute.textContent;
-      document.getElementById('mob-title').textContent    = elTitle.textContent;
+      // Header style Arcade
+      const region = attrs.NO_REG_TOURST
+        ? (REGION_LABELS[attrs.NO_REG_TOURST] || attrs.NO_REG_TOURST)
+        : (attrs.NO_REG_ADM || '');
+      document.getElementById('mob-arcade-region').textContent = region.toUpperCase();
+      document.getElementById('mob-arcade-rb').textContent     = (attrs.NOM_RB_MINI || attrs.NOM_RTE_BLEUE || '').toUpperCase();
+      document.getElementById('mob-arcade-nom').textContent    = (attrs.NOM || '').toUpperCase();
+
+      // Contenu
       document.getElementById('mob-desc').textContent     = elDesc.textContent;
       document.getElementById('mob-desc').style.display   = elDesc.style.display;
       document.getElementById('mob-grid').innerHTML       = elGrid.innerHTML;
@@ -1910,11 +1975,17 @@ async function showPopup(attrs, lat, lng) {
       mobSvc.innerHTML     = dskSvc.innerHTML;
       mobSvc.style.display = dskSvc.style.display;
       document.getElementById('mob-tags').innerHTML       = elTags.innerHTML;
+
+      // Bouton
       const mobBtn = document.getElementById('mob-btn');
       mobBtn.href         = popupBtn.href;
       mobBtn.style.display = popupBtn.style.display;
+
+      // Photo — spinner en attendant renderPhoto
       document.getElementById('mob-photo-wrap').innerHTML =
         '<div class="popup-photo-loading"><div class="spinner"></div></div>';
+
+      // Reset onglets sur Info
       document.querySelectorAll('.mob-ptab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'info'));
       document.querySelectorAll('.mob-pane').forEach(p => p.classList.toggle('active', p.id === 'mob-pane-info'));
       mobPopup.classList.add('visible');
@@ -3078,6 +3149,42 @@ async function loadElevation(attrs, lat, lng) {
 // Charger les données contextuelles quand on ouvre un onglet
 let lastPopupLat = null, lastPopupLng = null, lastPopupAttrs = null;
 let weatherLoaded = false, flowLoaded = false, elevLoaded = false;
+
+// MutationObserver : synchronise les panes desktop → mobile automatiquement
+function syncMobPane(desktopId, mobileId) {
+  const src = document.getElementById(desktopId);
+  const dst = document.getElementById(mobileId);
+  if (!src || !dst) return;
+  new MutationObserver(() => { dst.innerHTML = src.innerHTML; })
+    .observe(src, { childList: true, subtree: true });
+}
+setTimeout(() => {
+  syncMobPane('weather-content', 'mob-weather-content');
+  syncMobPane('flow-content',    'mob-flow-content');
+  syncMobPane('elev-content',    'mob-elev-content');
+}, 300);
+
+
+// Synchronise un container desktop vers son équivalent mobile
+function syncMobPane(desktopId, mobileId) {
+  const src = document.getElementById(desktopId);
+  const dst = document.getElementById(mobileId);
+  if (src && dst) {
+    // Observer les changements sur le container desktop
+    const obs = new MutationObserver(() => {
+      if (dst.style.display !== 'none' || document.getElementById('mob-popup')?.classList.contains('visible')) {
+        dst.innerHTML = src.innerHTML;
+      }
+    });
+    obs.observe(src, { childList: true, subtree: true, characterData: true });
+  }
+}
+// Activer les observers une fois le DOM prêt
+setTimeout(() => {
+  syncMobPane('weather-content', 'mob-weather-content');
+  syncMobPane('flow-content',    'mob-flow-content');
+  syncMobPane('elev-content',    'mob-elev-content');
+}, 500);
 
 document.querySelectorAll('.popup-tab').forEach(tab => {
   tab.addEventListener('click', () => {
