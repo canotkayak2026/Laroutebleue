@@ -1366,8 +1366,34 @@ const resetBtn     = document.getElementById('reset-btn');
 function closePopup() {
   popup.classList.remove('visible');
   document.getElementById('mob-popup')?.classList.remove('visible');
-  // Remettre le padding à zéro → carte reprend toute la hauteur
+
+  // Réinitialiser le popup desktop
+  elRoute.textContent = '';
+  elTitle.textContent = '';
+  elDesc.textContent  = '';
+  elGrid.innerHTML    = '';
+  elTags.innerHTML    = '';
+  photoWrap.innerHTML = '';
+  const rbBox = document.getElementById('popup-rb-box');
+  if (rbBox) rbBox.style.display = 'none';
+  document.getElementById('popup-services').innerHTML = '';
+  document.getElementById('popup-services').style.display = 'none';
+
+  // Réinitialiser le popup mobile
+  const mobFields = ['mob-arcade-region','mob-arcade-rb','mob-arcade-nom',
+                     'mob-desc','mob-grid','mob-tags','mob-services'];
+  mobFields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.innerHTML = ''; el.textContent = ''; }
+  });
+  const mobPhoto = document.getElementById('mob-photo-wrap');
+  if (mobPhoto) mobPhoto.innerHTML = '';
+  const mobBtn = document.getElementById('mob-btn');
+  if (mobBtn) mobBtn.href = '#';
+
+  // Remettre le padding carte à zéro
   if (window.innerWidth <= 768 && arcgisView) arcgisView.padding = { bottom: 0 };
+
   activeGeometry = null;
   clearHighlight();
   if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
@@ -1886,15 +1912,18 @@ async function showPopup(attrs, lat, lng) {
   const planEau = attrs.NOM_PLAN_EAU ? `DU ${attrs.NOM_PLAN_EAU.toUpperCase()}` : '';
   elRoute.textContent = planEau;
   elTitle.textContent = attrs.NOM || attrs.NOM_RTE_BLEUE || 'Parcours sans nom';
-  // Boite blanche RB sur desktop
+  // Boite blanche RB sur desktop — toujours affichée si on a un nom
   const rbBox = document.getElementById('popup-rb-box');
   const rbBoxName = document.getElementById('popup-rb-box-name');
-  const rbLabel = attrs.NOM_RB_MINI || attrs.NOM_RTE_BLEUE || '';
-  if (rbBox && rbBoxName && rbLabel) {
-    rbBoxName.textContent = rbLabel;
-    rbBox.style.display = 'inline-flex';
-  } else if (rbBox) {
-    rbBox.style.display = 'none';
+  const rbLabel = attrs.NOM_RB_MINI || attrs.NOM_RTE_BLEUE || attrs.NOM_PLAN_EAU || '';
+  console.log('rb-box debug:', { rbBox: !!rbBox, rbBoxName: !!rbBoxName, rbLabel, NOM_RB_MINI: attrs.NOM_RB_MINI, NOM_RTE_BLEUE: attrs.NOM_RTE_BLEUE });
+  if (rbBox && rbBoxName) {
+    if (rbLabel) {
+      rbBoxName.textContent = rbLabel;
+      rbBox.style.display = 'inline-flex';
+    } else {
+      rbBox.style.display = 'none';
+    }
   }
 
   // Description : DESCR + NOTE
