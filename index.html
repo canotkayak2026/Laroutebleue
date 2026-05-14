@@ -662,64 +662,82 @@
       }
       .mob-select-wrap select:focus { border-color: var(--accent); }
 
-      /* ── Popup mobile — sheet bas, onglets restructurés via JS ── */
-      #custom-popup {
+      /* ── Desktop popup : caché sur mobile ── */
+      #custom-popup { display: none !important; }
+
+      /* ── Popup mobile séparé ── */
+      #mob-popup {
+        display: flex !important;
+        flex-direction: column;
         position: fixed !important;
-        top: auto !important; right: 0 !important; left: 0 !important; bottom: 0 !important;
-        width: 100% !important; border-radius: 20px 20px 0 0;
-        max-height: 72vh; overflow-y: auto;
-        z-index: 500; opacity: 1 !important;
-        transform: translateY(100%) !important;
-        transition: transform .3s cubic-bezier(.4,0,.2,1) !important;
+        bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important;
+        width: 100% !important;
+        max-height: 52vh; overflow: hidden;
+        border-radius: 20px 20px 0 0;
+        background: #fff;
+        z-index: 500;
+        box-shadow: 0 -4px 24px rgba(0,0,0,.22);
+        transform: translateY(100%);
+        transition: transform .3s cubic-bezier(.4,0,.2,1);
       }
-      #custom-popup.visible { transform: translateY(0) !important; }
+      #mob-popup.visible { transform: translateY(0); }
 
-      /* Onglets — fond brand, arrondi haut, pill drag */
-      #popup-tabs-bar {
-        background: var(--brand) !important;
-        border-bottom: none !important;
-        border-radius: 20px 20px 0 0 !important;
-        padding: 12px 10px 7px !important;
-        gap: 5px !important;
-        margin: 0 !important;
+      /* Onglets en tête — fond brand */
+      #mob-popup-tabs {
+        background: var(--brand);
+        border-radius: 20px 20px 0 0;
+        padding: 12px 10px 7px;
+        display: flex; gap: 5px; flex-shrink: 0;
       }
-      #popup-tabs-bar::before {
-        content: ''; display: block;
-        width: 36px; height: 4px;
-        background: rgba(255,255,255,.28); border-radius: 3px;
+      #mob-popup-drag {
+        width: 36px; height: 4px; border-radius: 3px;
+        background: rgba(255,255,255,.28);
         margin: 0 auto 9px;
+        position: absolute; left: 50%; transform: translateX(-50%); top: 10px;
       }
-      .popup-tab {
-        background: rgba(255,255,255,.1) !important;
-        border-radius: 8px !important;
-        border-bottom: none !important;
-        color: rgba(255,255,255,.55) !important;
-        font-size: 9.5px !important;
-        padding: 6px 3px !important;
-        margin-bottom: 0 !important;
+      #mob-popup-tabs { padding-top: 20px; }
+      .mob-ptab {
+        flex: 1; background: rgba(255,255,255,.1);
+        border: none; border-radius: 8px;
+        color: rgba(255,255,255,.55);
+        font-family: 'Montserrat',Arial,sans-serif;
+        font-size: 9.5px; font-weight: 600;
+        padding: 6px 3px; cursor: pointer;
+        transition: background .15s;
       }
-      .popup-tab.active {
-        background: rgba(255,255,255,.22) !important;
-        color: #fff !important;
-        box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.3) !important;
+      .mob-ptab.active {
+        background: rgba(255,255,255,.22);
+        color: #fff;
+        box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.3);
       }
 
-      /* Photo compacte dans pane-info mobile */
-      #pane-info .popup-photo-wrap { height: 110px !important; }
+      /* Panes */
+      .mob-pane { display: none; overflow-y: auto; flex: 1; }
+      .mob-pane.active { display: flex; flex-direction: column; }
 
-      /* Header compact */
-      #pane-info .popup-header { padding: 7px 36px 7px 12px !important; }
-      #pane-info .popup-route  { font-size: 8px !important; margin-bottom: 1px !important; }
-      #pane-info .popup-title  { font-size: 14px !important; }
+      /* Photo */
+      .mob-photo-wrap {
+        width: 100%; height: 80px; overflow: hidden;
+        background: var(--foam); flex-shrink: 0;
+      }
+      .mob-photo-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
 
-      /* Stats compactes */
-      .popup-desc { max-height: 38px; overflow: hidden; font-size: 11px; margin-bottom: 7px; }
-      .popup-grid { gap: 4px; margin-bottom: 7px; }
-      .popup-stat, .popup-stat-empty { padding: 5px 7px; }
-      .popup-stat-label { font-size: 7.5px; }
-      .popup-stat-value { font-size: 10.5px; }
-      .popup-services { margin-bottom: 7px; }
-      .svc-badge { font-size: 9px; padding: 3px 8px 3px 6px; }
+      /* Header */
+      .mob-header {
+        background: var(--brand); padding: 7px 36px 7px 14px;
+        position: relative; flex-shrink: 0;
+      }
+
+      /* Corps info */
+      .mob-info-body { padding: 8px 12px 14px; overflow-y: auto; }
+      .mob-info-body .popup-desc { font-size: 11px; max-height: 44px; overflow: hidden; margin-bottom: 7px; }
+      .mob-info-body .popup-grid { gap: 4px; margin-bottom: 7px; }
+      .mob-info-body .popup-stat,
+      .mob-info-body .popup-stat-empty { padding: 5px 7px; }
+      .mob-info-body .popup-stat-label { font-size: 7.5px; }
+      .mob-info-body .popup-stat-value { font-size: 10.5px; }
+      .mob-info-body .popup-services { margin-bottom: 7px; }
+      .mob-info-body .svc-badge { font-size: 9px; padding: 3px 8px 3px 6px; }
 
       /* ── Contrôles carte — droite, au-dessus popup potentiel ── */
       #map-ctrl-extra {
@@ -737,10 +755,11 @@
       .popup-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     }
 
-    /* Cacher la barre mobile sur desktop */
+    /* Cacher éléments mobile sur desktop */
     @media (min-width: 769px) {
       #mobile-filter-bar { display: none !important; }
       #mobile-filter-sheet { display: none !important; }
+      #mob-popup { display: none !important; }
     }
 
     /* Drag handle barre visible */
@@ -1119,6 +1138,50 @@
   </div>
 </div>
 
+<!-- ── Popup mobile (profil séparé) ──────────────────────────── -->
+<div id="mob-popup">
+  <!-- Onglets en tête -->
+  <div id="mob-popup-tabs">
+    <div id="mob-popup-drag"></div>
+    <button class="mob-ptab active" data-tab="info">📋 Info</button>
+    <button class="mob-ptab" data-tab="meteo">🌤 Météo</button>
+    <button class="mob-ptab" data-tab="debit">💧 Débit</button>
+    <button class="mob-ptab" data-tab="elev">⛰ Profil</button>
+  </div>
+  <!-- Pane Info : photo + header + contenu + bouton -->
+  <div id="mob-pane-info" class="mob-pane active">
+    <div id="mob-photo-wrap" class="mob-photo-wrap">
+      <div class="popup-photo-loading"><div class="spinner"></div></div>
+    </div>
+    <div id="mob-header" class="mob-header">
+      <button class="popup-close" id="mob-close-btn">✕</button>
+      <div id="mob-route" class="popup-route"></div>
+      <div id="mob-title" class="popup-title"></div>
+    </div>
+    <div class="mob-info-body">
+      <div id="mob-desc"     class="popup-desc"></div>
+      <div id="mob-grid"     class="popup-grid"></div>
+      <div id="mob-services" class="popup-services" style="display:none"></div>
+      <div id="mob-tags"     class="popup-tags"></div>
+      <div class="popup-divider"></div>
+      <a class="popup-btn" id="mob-btn" href="#" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        Voir la fiche complète
+      </a>
+    </div>
+  </div>
+  <!-- Autres panes -->
+  <div id="mob-pane-meteo" class="mob-pane">
+    <div class="weather-widget" id="mob-weather-content"><div class="weather-loading">Chargement météo…</div></div>
+  </div>
+  <div id="mob-pane-debit" class="mob-pane">
+    <div class="flow-widget" id="mob-flow-content"><div class="flow-loading">Chargement débit…</div></div>
+  </div>
+  <div id="mob-pane-elev" class="mob-pane">
+    <div class="elev-widget" id="mob-elev-content"><div class="elev-loading">Chargement profil…</div></div>
+  </div>
+</div>
+
 <!-- Toast partage -->
 <div id="share-toast">🔗 Lien copié !</div>
 
@@ -1248,6 +1311,7 @@ const resetBtn     = document.getElementById('reset-btn');
 // ── Fermer popup ─────────────────────────────────────────────────
 function closePopup() {
   popup.classList.remove('visible');
+  document.getElementById('mob-popup')?.classList.remove('visible');
   activeGeometry = null;
   clearHighlight();
   if (activeItem) { activeItem.classList.remove('active'); activeItem = null; }
@@ -1805,13 +1869,40 @@ async function showPopup(attrs, lat, lng) {
     popupDivider.style.display = 'none';
   }
 
-  // Animation : flash rapide si déjà visible, sinon apparition
-  if (popup.classList.contains('visible')) {
-    popup.classList.add('updating');
-    await new Promise(r => setTimeout(r, 120));
-    popup.classList.remove('updating');
-  } else {
-    popup.classList.add('visible');
+  // ── Sync + affichage popup mobile ────────────────────────────────
+  if (window.innerWidth <= 768) {
+    const mobPopup = document.getElementById('mob-popup');
+    if (mobPopup) {
+      document.getElementById('mob-route').textContent    = elRoute.textContent;
+      document.getElementById('mob-title').textContent    = elTitle.textContent;
+      document.getElementById('mob-desc').textContent     = elDesc.textContent;
+      document.getElementById('mob-desc').style.display   = elDesc.style.display;
+      document.getElementById('mob-grid').innerHTML       = elGrid.innerHTML;
+      const mobSvc = document.getElementById('mob-services');
+      const dskSvc = document.getElementById('popup-services');
+      mobSvc.innerHTML     = dskSvc.innerHTML;
+      mobSvc.style.display = dskSvc.style.display;
+      document.getElementById('mob-tags').innerHTML       = elTags.innerHTML;
+      const mobBtn = document.getElementById('mob-btn');
+      mobBtn.href         = popupBtn.href;
+      mobBtn.style.display = popupBtn.style.display;
+      document.getElementById('mob-photo-wrap').innerHTML =
+        '<div class="popup-photo-loading"><div class="spinner"></div></div>';
+      document.querySelectorAll('.mob-ptab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'info'));
+      document.querySelectorAll('.mob-pane').forEach(p => p.classList.toggle('active', p.id === 'mob-pane-info'));
+      mobPopup.classList.add('visible');
+    }
+  }
+
+  // Animation desktop
+  if (window.innerWidth > 768) {
+    if (popup.classList.contains('visible')) {
+      popup.classList.add('updating');
+      await new Promise(r => setTimeout(r, 120));
+      popup.classList.remove('updating');
+    } else {
+      popup.classList.add('visible');
+    }
   }
 
   // Photos
@@ -1839,6 +1930,8 @@ function renderPhoto() {
         <circle cx="8.5" cy="8.5" r="1.5"/>
         <polyline points="21 15 16 10 5 21"/>
       </svg>Aucune photo disponible</div>`;
+    const mobPW = document.getElementById('mob-photo-wrap');
+    if (mobPW) mobPW.innerHTML = photoWrap.innerHTML;
     return;
   }
   const img = document.createElement('img');
@@ -1862,6 +1955,9 @@ function renderPhoto() {
       photoWrap.appendChild(next);
     }
   }
+  // Sync photo dans mob-popup
+  const mobPW = document.getElementById('mob-photo-wrap');
+  if (mobPW) mobPW.innerHTML = photoWrap.innerHTML;
 }
 
 // ── Panneau de filtres ───────────────────────────────────────────
@@ -3026,54 +3122,7 @@ function restoreFromUrl() {
 }
 restoreFromUrl();
 
-// ── Restructuration popup mobile ─────────────────────────────────
-(function() {
-  if (window.innerWidth > 768) return;
-
-  const popup     = document.getElementById('custom-popup');
-  const tabsBar   = document.getElementById('popup-tabs-bar');
-  const paneInfo  = document.getElementById('pane-info');
-  const body      = popup.querySelector('.popup-body');
-
-  if (!popup || !tabsBar || !paneInfo || !body) return;
-
-  // Récupérer les éléments AVANT de toucher au DOM
-  const photoWrap = document.getElementById('photo-wrap');
-  const header    = popup.querySelector('.popup-header');
-  const desc      = document.getElementById('popup-desc');
-  const grid      = document.getElementById('popup-grid');
-  const services  = document.getElementById('popup-services');
-  const tags      = document.getElementById('popup-tags');
-
-  // pane-info contient déjà divider + btn — on garde ça
-  const divider   = document.getElementById('popup-divider');
-  const btn       = document.getElementById('popup-btn');
-
-  // 1. Onglets → tout premier enfant du popup
-  popup.insertBefore(tabsBar, popup.firstChild);
-
-  // 2. Photo + header → dans pane-info AVANT le contenu existant (divider+btn)
-  paneInfo.insertBefore(header,   paneInfo.firstChild);
-  paneInfo.insertBefore(photoWrap, paneInfo.firstChild);
-
-  // 3. desc/grid/services/tags → dans un wrapper dans pane-info, avant divider
-  const infoBody = document.createElement('div');
-  infoBody.style.cssText = 'padding:6px 12px 0';
-  infoBody.appendChild(desc);
-  infoBody.appendChild(grid);
-  infoBody.appendChild(services);
-  infoBody.appendChild(tags);
-
-  // Insérer avant divider s'il existe, sinon à la fin de pane-info
-  if (divider) paneInfo.insertBefore(infoBody, divider.parentNode || divider);
-  else paneInfo.appendChild(infoBody);
-
-  // 4. popup-body ne contient plus que les autres panes (météo/débit/profil)
-  // On le garde visible pour les autres onglets
-  // Cacher juste le wrapper interne qui était avant les onglets
-  const bodyPadding = body.querySelector('div[style*="padding:0 0 12px"]');
-  if (bodyPadding) bodyPadding.style.display = 'none';
-})();
+// (restructuration popup mobile remplacée par mob-popup séparé)
 
 // ── Barre filtres mobile ─────────────────────────────────────────
 (function() {
