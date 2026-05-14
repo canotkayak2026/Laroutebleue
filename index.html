@@ -222,7 +222,6 @@
     /* Bas : chips */
     .parcours-bottom { display:flex; flex-direction:column; gap:0; }
 
-
     .parcours-chips { display:flex; gap:3px; flex-wrap:wrap; }
     .chip {
       font-family:'Montserrat',Arial,sans-serif; font-size:8.5px; font-weight:600;
@@ -236,8 +235,6 @@
     .chip.diff-ND03 { background:rgba(160,40,40,.65); border-color:rgba(200,60,60,.7); }
 
     .parcours-rb   { display:none; }
-    .parcours-info { display:none; }
-    .parcours-milieu-tag { display:none; }
 
     @keyframes icon-pulse {
       0%   { box-shadow:0 0 0 0 rgba(0,158,194,.7); }
@@ -586,7 +583,6 @@
       #mobile-filter-bar > * { pointer-events: auto; }
 
       /* Cacher tout sauf le bouton filtre */
-      #mob-geo-btn, #mob-home-btn, #mob-count { display: none !important; }
 
       .mob-filter-pill {
         display: flex; align-items: center; gap: 6px;
@@ -666,7 +662,7 @@
       }
       .mob-select-wrap select:focus { border-color: var(--accent); }
 
-      /* ── Popup mobile — sheet bas compact, onglets EN TÊTE ── */
+      /* ── Popup mobile — sheet bas, onglets restructurés via JS ── */
       #custom-popup {
         position: fixed !important;
         top: auto !important; right: 0 !important; left: 0 !important; bottom: 0 !important;
@@ -675,29 +671,24 @@
         z-index: 500; opacity: 1 !important;
         transform: translateY(100%) !important;
         transition: transform .3s cubic-bezier(.4,0,.2,1) !important;
-        display: flex; flex-direction: column;
       }
       #custom-popup.visible { transform: translateY(0) !important; }
 
-      /* ── Onglets : PREMIER élément visible (order 0) ── */
+      /* Onglets — fond brand, arrondi haut, pill drag */
       #popup-tabs-bar {
-        order: 0 !important;
         background: var(--brand) !important;
         border-bottom: none !important;
         border-radius: 20px 20px 0 0 !important;
         padding: 12px 10px 7px !important;
         gap: 5px !important;
         margin: 0 !important;
-        flex-shrink: 0;
       }
-      /* Pill drag au-dessus des onglets */
       #popup-tabs-bar::before {
-        content: '';
-        display: block; width: 36px; height: 4px;
+        content: ''; display: block;
+        width: 36px; height: 4px;
         background: rgba(255,255,255,.28); border-radius: 3px;
         margin: 0 auto 9px;
       }
-      /* Style pill des onglets */
       .popup-tab {
         background: rgba(255,255,255,.1) !important;
         border-radius: 8px !important;
@@ -705,9 +696,7 @@
         color: rgba(255,255,255,.55) !important;
         font-size: 9.5px !important;
         padding: 6px 3px !important;
-        letter-spacing: .02em !important;
         margin-bottom: 0 !important;
-        transition: background .15s !important;
       }
       .popup-tab.active {
         background: rgba(255,255,255,.22) !important;
@@ -715,19 +704,16 @@
         box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.3) !important;
       }
 
-      /* Photo (order 1) — compact */
-      .popup-photo-wrap { order: 1 !important; height: 110px !important; flex-shrink: 0; }
+      /* Photo compacte dans pane-info mobile */
+      #pane-info .popup-photo-wrap { height: 110px !important; }
 
-      /* Header titre (order 2) — compact */
-      .popup-header { order: 2 !important; padding: 8px 36px 8px 12px !important; flex-shrink: 0; }
-      .popup-route { font-size: 8px !important; margin-bottom: 1px !important; }
-      .popup-title { font-size: 14px !important; }
-
-      /* Body contenu (order 3) — compact */
-      .popup-body { order: 3 !important; padding: 8px 12px 12px !important; }
+      /* Header compact */
+      #pane-info .popup-header { padding: 7px 36px 7px 12px !important; }
+      #pane-info .popup-route  { font-size: 8px !important; margin-bottom: 1px !important; }
+      #pane-info .popup-title  { font-size: 14px !important; }
 
       /* Stats compactes */
-      .popup-desc { max-height: 40px; overflow: hidden; font-size: 11px; margin-bottom: 8px; }
+      .popup-desc { max-height: 38px; overflow: hidden; font-size: 11px; margin-bottom: 7px; }
       .popup-grid { gap: 4px; margin-bottom: 7px; }
       .popup-stat, .popup-stat-empty { padding: 5px 7px; }
       .popup-stat-label { font-size: 7.5px; }
@@ -758,12 +744,6 @@
     }
 
     /* Drag handle barre visible */
-    .sidebar-drag-handle {
-      display: none;
-      width: 100%; padding: 8px 0 0;
-      justify-content: center; cursor: grab;
-      position: absolute; top: 0; left: 0; z-index: 5;
-    }
     .sidebar-drag-handle span {
       display: block; width: 36px; height: 4px;
       background: rgba(255,255,255,.4); border-radius: 2px;
@@ -954,15 +934,9 @@
       Filtres
       <span class="mob-filter-dot" id="mob-filter-dot"></span>
     </button>
-    <button id="mob-geo-btn" class="mob-filter-pill" title="Me localiser">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></svg>
-      Localiser
-    </button>
-    <button id="mob-home-btn" class="mob-filter-pill" title="Vue initiale">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 13 15 13 15 21"/></svg>
-      Québec
-    </button>
-    <span id="mob-count" class="mob-count">…</span>
+    
+    
+    
   </div>
 
   <!-- Sheet filtres mobile -->
@@ -1403,29 +1377,12 @@ function compensatedCenter(lng, lat) {
 }
 
 // ── Fetch paginé ─────────────────────────────────────────────────
-// Champs services — récupérés séparément car absents de certaines couches
-const SVC_FIELDS = 'TARIF,STAT_LAV,LOCAT,SERV_GUID,NAVETT';
-let svcFieldsAvailable = false; // sera vérifié au premier chargement
+// Champs services (TARIF,STAT_LAV,LOCAT,SERV_GUID,NAVETT) inclus dans OUT_FIELDS
 
 async function fetchPaginated() {
   let features = [], offset = 0;
 
-  // Vérifier si les champs services existent dans la couche (une seule fois)
-  if (!svcFieldsAvailable) {
-    try {
-      const testUrl = `${LAYER_URL}/query?where=1%3D1&outFields=${SVC_FIELDS}&returnGeometry=false&resultRecordCount=1&f=json`;
-      const testRes = await fetch(testUrl);
-      const testData = await testRes.json();
-      if (!testData.error) {
-        svcFieldsAvailable = true;
-        console.log('[Services] Champs services disponibles dans la couche');
-      } else {
-        console.warn('[Services] Champs services absents de la couche:', testData.error.message);
-      }
-    } catch(e) { console.warn('[Services] Test champs services échoué:', e); }
-  }
-
-  const fieldsToFetch = svcFieldsAvailable ? OUT_FIELDS + ',' + SVC_FIELDS : OUT_FIELDS;
+  const fieldsToFetch = OUT_FIELDS;
   const base = `${LAYER_URL}/query?where=1%3D1&outFields=${encodeURIComponent(fieldsToFetch)}&returnGeometry=true&outSR=4326&f=json`;
   while (true) {
     const res  = await fetch(`${base}&resultOffset=${offset}&resultRecordCount=1000`);
@@ -1563,11 +1520,9 @@ function buildSidebar(features) {
             if (result && result.extent) {
           arcgisView.goTo(result.extent.expand(1.3), { duration: 700 });
         } else {
-          console.warn('Extent vide pour cette région');
-        }
+                  }
       }).catch(err => {
-        console.warn('queryExtent sectionLayer échoué:', err);
-      });
+              });
     }
 
     // ── Clic sur le header → sélection région ──────────────────────
@@ -1732,7 +1687,6 @@ searchInput.addEventListener('input', () => {
   });
   sidebarCount.textContent = `${visible} résultat${visible !== 1 ? 's' : ''}`;
 });
-
 
 // ── Popup ────────────────────────────────────────────────────────
 function statCell(label, value) {
@@ -2050,7 +2004,6 @@ document.getElementById('filter-reset-btn').addEventListener('click', () => {
 document.getElementById('filter-collapse-btn').addEventListener('click', () => {
   document.getElementById('filter-panel').classList.toggle('collapsed');
 });
-
 
 // ── Basemap switcher ─────────────────────────────────────────────
 
@@ -2495,8 +2448,7 @@ async function loadTides(attrs, lat, lng) {
       </a>`;
 
   } catch(err) {
-    console.warn('loadTides error:', err);
-    el.innerHTML = `
+        el.innerHTML = `
       <div class="tide-widget">
         <div class="tide-header">Marée${nomEau ? ' — ' + nomEau : ''}</div>
         <div style="color:#888;font-size:11px;padding:8px 0;line-height:1.7">
@@ -2509,7 +2461,6 @@ async function loadTides(attrs, lat, lng) {
       </div>`;
   }
 }
-
 
 // ── Tendance légère : compare valeur actuelle vs il y a ~6h ─────
 // On fetch fichier_donnees.asp mais on s'arrête après ~2KB (premiers points)
@@ -3075,6 +3026,55 @@ function restoreFromUrl() {
 }
 restoreFromUrl();
 
+// ── Restructuration popup mobile ─────────────────────────────────
+(function() {
+  if (window.innerWidth > 768) return;
+
+  const popup     = document.getElementById('custom-popup');
+  const tabsBar   = document.getElementById('popup-tabs-bar');
+  const paneInfo  = document.getElementById('pane-info');
+  const body      = popup.querySelector('.popup-body');
+
+  if (!popup || !tabsBar || !paneInfo || !body) return;
+
+  // Récupérer les éléments AVANT de toucher au DOM
+  const photoWrap = document.getElementById('photo-wrap');
+  const header    = popup.querySelector('.popup-header');
+  const desc      = document.getElementById('popup-desc');
+  const grid      = document.getElementById('popup-grid');
+  const services  = document.getElementById('popup-services');
+  const tags      = document.getElementById('popup-tags');
+
+  // pane-info contient déjà divider + btn — on garde ça
+  const divider   = document.getElementById('popup-divider');
+  const btn       = document.getElementById('popup-btn');
+
+  // 1. Onglets → tout premier enfant du popup
+  popup.insertBefore(tabsBar, popup.firstChild);
+
+  // 2. Photo + header → dans pane-info AVANT le contenu existant (divider+btn)
+  paneInfo.insertBefore(header,   paneInfo.firstChild);
+  paneInfo.insertBefore(photoWrap, paneInfo.firstChild);
+
+  // 3. desc/grid/services/tags → dans un wrapper dans pane-info, avant divider
+  const infoBody = document.createElement('div');
+  infoBody.style.cssText = 'padding:6px 12px 0';
+  infoBody.appendChild(desc);
+  infoBody.appendChild(grid);
+  infoBody.appendChild(services);
+  infoBody.appendChild(tags);
+
+  // Insérer avant divider s'il existe, sinon à la fin de pane-info
+  if (divider) paneInfo.insertBefore(infoBody, divider.parentNode || divider);
+  else paneInfo.appendChild(infoBody);
+
+  // 4. popup-body ne contient plus que les autres panes (météo/débit/profil)
+  // On le garde visible pour les autres onglets
+  // Cacher juste le wrapper interne qui était avant les onglets
+  const bodyPadding = body.querySelector('div[style*="padding:0 0 12px"]');
+  if (bodyPadding) bodyPadding.style.display = 'none';
+})();
+
 // ── Barre filtres mobile ─────────────────────────────────────────
 (function() {
   const sheet     = document.getElementById('mobile-filter-sheet');
@@ -3346,7 +3346,6 @@ geoBtn.addEventListener('click', () => {
   }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
 });
 
-// Timeout — si ArcGIS ne charge pas en 15s, afficher le message d'erreur
 const mapErrorEl = document.getElementById('map-error');
 const mapLoadTimeout = setTimeout(() => {
   if (!arcgisView && mapErrorEl) mapErrorEl.style.display = 'flex';
@@ -3354,70 +3353,46 @@ const mapLoadTimeout = setTimeout(() => {
 
 require([
   "esri/Map","esri/views/MapView","esri/layers/FeatureLayer",
-  "esri/symbols/SimpleMarkerSymbol","esri/renderers/SimpleRenderer","esri/geometry/Point",
+  "esri/geometry/Point",
   "esri/layers/GraphicsLayer","esri/Graphic"
-], function(Map, MapView, FeatureLayer, SimpleMarkerSymbol, SimpleRenderer, Point, GraphicsLayer, Graphic) {
+], function(Map, MapView, FeatureLayer, Point, GraphicsLayer, Graphic) {
 
-  // ── Pin goutte épurée avec logo Route Bleue ─────────────────────
-  function makeDropSVG(pinW, hover, logoB64) {
-    // Proportions : largeur × 1.45 de hauteur, pointe en bas
-    const W = pinW;
-    const H = Math.round(W * 1.45);
-    const rx = W / 2;               // rayon haut = demi-largeur
-    const ry = W * 0.52;            // rayon vertical du haut (légèrement elliptique)
-    const cy = ry;                  // centre de l'ellipse en haut
-    const logoS = W * 0.58;         // taille du logo B
+  // ── Pin : goutte SVG + cercle blanc + B bleu ───────────────────
+  const LOGO_B_BLEU = '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';
+
+  function makeDropSVG(pinW, hover) {
+    const W  = pinW;
+    const H  = Math.round(W * 1.45);
+    const rx = W / 2;
+    const ry = W * 0.52;
+    const cy = ry;
+    const sw = hover ? 2 : 1.5;
+    const f0 = hover ? '#3860cc' : '#1240a0';
+    const f1 = hover ? '#001e80' : '#001540';
+    const cr = rx * 0.60;
+    const logoS = W * 0.40;
     const lx = (W - logoS) / 2;
-    const ly = (ry * 2 - logoS) / 2;
-    const fill   = hover ? '#1a4db5' : '#002569';
-    const stroke = hover ? '#fff' : '#fff';
-    const sw     = hover ? 2 : 1.5;
-    const shadow = hover
-      ? 'filter:drop-shadow(0 4px 8px rgba(0,0,0,.55))'
-      : 'filter:drop-shadow(0 2px 5px rgba(0,0,0,.40))';
-    // Forme : ellipse en haut + triangle pointu en bas
-    // Path : arc elliptique + pointe
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${shadow}">
-      <defs>
-        <radialGradient id="rg${hover?1:0}" cx="38%" cy="32%" r="65%">
-          <stop offset="0%" stop-color="${hover ? '#3860cc' : '#1240a0'}"/>
-          <stop offset="100%" stop-color="${hover ? '#001e80' : '#001540'}"/>
-        </radialGradient>
-        <clipPath id="clip${hover?1:0}">
-          <ellipse cx="${rx}" cy="${cy}" rx="${rx - sw/2}" ry="${ry - sw/2}"/>
-        </clipPath>
-      </defs>
-      <!-- Corps : ellipse + pointe -->
-      <path d="M ${sw/2},${cy}
-               A ${rx-sw/2},${ry-sw/2} 0 1 1 ${W-sw/2},${cy}
-               Q ${W-sw/2},${cy + ry * 1.1} ${rx},${H - sw/2}
-               Q ${sw/2},${cy + ry * 1.1} ${sw/2},${cy} Z"
-            fill="url(#rg${hover?1:0})" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>
-      <!-- Logo B en blanc -->
-      ${logoB64 ? `<image href="${logoB64}" x="${lx}" y="${ly}" width="${logoS}" height="${logoS}" clip-path="url(#clip${hover?1:0})"/>` : ``}
-    </svg>`;
-    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+    const ly = cy - logoS / 2;
+    const gid = hover ? 'rg1' : 'rg0';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">'
+      + '<defs><radialGradient id="' + gid + '" cx="38%" cy="32%" r="65%">'
+      + '<stop offset="0%" stop-color="' + f0 + '"/>'
+      + '<stop offset="100%" stop-color="' + f1 + '"/>'
+      + '</radialGradient></defs>'
+      + '<path d="M ' + (sw/2) + ',' + cy + ' A ' + (rx-sw/2) + ',' + (ry-sw/2) + ' 0 1 1 ' + (W-sw/2) + ',' + cy
+        + ' Q ' + (W-sw/2) + ',' + (cy+ry*1.1) + ' ' + rx + ',' + (H-sw/2)
+        + ' Q ' + (sw/2) + ',' + (cy+ry*1.1) + ' ' + (sw/2) + ',' + cy + ' Z"'
+        + ' fill="url(#' + gid + ')" stroke="white" stroke-width="' + sw + '" stroke-linejoin="round"/>'
+      + '<circle cx="' + rx + '" cy="' + cy + '" r="' + cr + '" fill="white"/>'
+      + '<image href="data:image/png;base64,' + LOGO_B_BLEU + '" x="' + lx + '" y="' + ly + '" width="' + logoS + '" height="' + logoS + '"/>'
+      + '</svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
-  const PIN_W = 30,   PIN_H = Math.round(30 * 1.45);
-  const PIN_WH = 38,  PIN_HH = Math.round(38 * 1.45);
+  const symCircle = { type:'picture-marker', url:makeDropSVG(32,false), width:'32px', height:Math.round(32*1.45)+'px', yoffset:Math.round(32*0.45/2)+'px' };
+  const symHover  = { type:'picture-marker', url:makeDropSVG(40,true),  width:'40px', height:Math.round(40*1.45)+'px', yoffset:Math.round(40*0.45/2)+'px' };
 
-  // Charger icons/Route_bleue_blanc.png en base64 pour l'injecter dans le SVG du pin
-  let symCircle = { type: 'picture-marker', url: makeDropSVG(PIN_W, false, null), width: PIN_W+'px', height: PIN_H+'px', yoffset: (PIN_H-PIN_W)/2+'px' };
-  let symHover  = { type: 'picture-marker', url: makeDropSVG(PIN_WH, true, null), width: PIN_WH+'px', height: PIN_HH+'px', yoffset: (PIN_HH-PIN_WH)/2+'px' };
-
-  (async () => {
-    try {
-      const res = await fetch('icons/Route_bleue_blanc.png');
-      const buf = await res.arrayBuffer();
-      const b64 = 'data:image/png;base64,' + btoa(String.fromCharCode(...new Uint8Array(buf)));
-      symCircle = { type: 'picture-marker', url: makeDropSVG(PIN_W, false, b64), width: PIN_W+'px', height: PIN_H+'px', yoffset: (PIN_H-PIN_W)/2+'px' };
-      symHover  = { type: 'picture-marker', url: makeDropSVG(PIN_WH, true, b64), width: PIN_WH+'px', height: PIN_HH+'px', yoffset: (PIN_HH-PIN_WH)/2+'px' };
-      if (ptLayer) ptLayer.renderer = { type: 'simple', symbol: symCircle };
-    } catch(e) { /* logo absent, pin sans B */ }
-  })();
-
-  const clusterConfig = {
+    const clusterConfig = {
     type: "cluster", clusterRadius: "80px",
     labelingInfo: [{
       deconflictionStrategy: "none",
