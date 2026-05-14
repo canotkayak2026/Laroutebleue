@@ -3782,8 +3782,8 @@ require([
       spatialFilterTimer = setTimeout(applySpatialFilter, 400);
     });
 
-    // Clic carte
-    arcgisView.on('click', async (event) => {
+    // Clic carte — + immediate-click pour mobile (tap rapide)
+    async function handleMapClick(event) {
       const response = await arcgisView.hitTest(event, { include:[arcgisLayer] });
       const hit = response.results.find(r => r.layer === arcgisLayer);
       if (!hit) { closePopup(); return; }
@@ -3809,7 +3809,6 @@ require([
       resetBtn.classList.add('visible');
 
       activeGeometry = hit.graphic.geometry;
-      // Zoomer + surligner la géométrie réelle de la section
       const sectnId = hit.graphic.attributes.ID_SECTN;
       if (sectnId && sectionLayer) {
         highlightSection(sectnId);
@@ -3819,7 +3818,6 @@ require([
         }).then(result => {
           if (result && result.extent) {
             if (window.innerWidth <= 768) {
-              // Décaler le centre vers le haut pour que le parcours reste visible au-dessus du popup
               const popupH = window.innerHeight * 0.52;
               arcgisView.padding = { bottom: popupH };
               arcgisView.goTo(result.extent.expand(1.4), { duration: 600 });
@@ -3831,7 +3829,14 @@ require([
       }
       await showPopup(hit.graphic.attributes, hit.graphic.geometry.latitude, hit.graphic.geometry.longitude);
       activeGeometry = hit.graphic.geometry;
-    });
+    }
+
+    arcgisView.on('click', handleMapClick);
+    // Sur mobile avec browserTouchPanEnabled, 'click' ne se déclenche pas toujours
+    // 'immediate-click' capte le tap avant le délai de détection de pan
+    if (window.innerWidth <= 768) {
+      arcgisView.on('immediate-click', handleMapClick);
+    }
 
     // Curseur + hover dynamique sur les points
     let hoveredGraphic = null;
