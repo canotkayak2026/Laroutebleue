@@ -732,13 +732,24 @@
         flex-shrink: 0; position: relative;
       }
       #mob-arcade-top { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-      #mob-arcade-logo { width:36px; height:36px; object-fit:contain; flex-shrink:0; }
+      #mob-arcade-logo { width:30px; height:30px; object-fit:contain; flex-shrink:0; }
       #mob-arcade-region {
         font-family:'Montserrat',Arial,sans-serif; font-size:9px; font-weight:600;
         color:rgba(255,255,255,.7); text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px;
       }
       #mob-arcade-rb {
-        font-family:'Montserrat',Arial,sans-serif; font-size:15px; font-weight:700; color:#fff; line-height:1.2;
+        font-family:'Montserrat',Arial,sans-serif; font-size:14px; font-weight:700; color:#fff; line-height:1.2;
+      }
+      /* Boite blanche RB style liste */
+      #mob-arcade-rb-box {
+        display:flex; align-items:center; gap:7px;
+        background:#fff; border:1.5px solid #002569;
+        border-radius:6px; padding:5px 10px 5px 8px;
+        margin-bottom:8px; align-self:flex-start;
+      }
+      #mob-arcade-rb-box img { width:18px; height:18px; object-fit:contain; }
+      #mob-arcade-rb-box span {
+        font-family:'Montserrat',Arial,sans-serif; font-size:11px; font-weight:700; color:#002569;
       }
       #mob-arcade-nom-wrap { display:inline-block; margin-bottom:10px; }
       #mob-arcade-nom {
@@ -1128,6 +1139,10 @@
     <div class="popup-header">
       <button class="popup-close" id="popup-close-btn">✕</button>
       <div class="popup-route" id="popup-route"></div>
+      <div class="popup-rb-box" id="popup-rb-box" style="display:none">
+        <img src="icons/Route_bleue_bleue.png" alt="B"/>
+        <span class="popup-rb-box-name" id="popup-rb-box-name"></span>
+      </div>
       <div class="popup-title" id="popup-title"></div>
     </div>
     <div class="popup-body">
@@ -1182,12 +1197,16 @@
     <div id="mob-arcade-header">
       <button class="popup-close" id="mob-close-btn">✕</button>
       <div id="mob-arcade-top">
-        <img src="icons/Route_bleue_bleue.png" id="mob-arcade-logo" alt="B"/>
         <div>
           <div id="mob-arcade-region"></div>
-          <div id="mob-arcade-rb"></div>
         </div>
       </div>
+      <!-- Boite blanche logo B + nom RB -->
+      <div id="mob-arcade-rb-box">
+        <img src="icons/Route_bleue_bleue.png" alt="B"/>
+        <span id="mob-arcade-rb"></span>
+      </div>
+      <!-- Badge vert nom parcours -->
       <div id="mob-arcade-nom-wrap">
         <div id="mob-arcade-nom"></div>
       </div>
@@ -1869,8 +1888,18 @@ async function showPopup(attrs, lat, lng) {
   }
 
   // En-tête
-  elRoute.textContent = attrs.NOM_RTE_BLEUE || '';
+  elRoute.textContent = '';  // remplacé par rb-box
   elTitle.textContent = attrs.NOM || attrs.NOM_RTE_BLEUE || 'Parcours sans nom';
+  // Boite blanche RB sur desktop
+  const rbBox = document.getElementById('popup-rb-box');
+  const rbBoxName = document.getElementById('popup-rb-box-name');
+  const rbLabel = attrs.NOM_RB_MINI || attrs.NOM_RTE_BLEUE || '';
+  if (rbBox && rbBoxName && rbLabel) {
+    rbBoxName.textContent = rbLabel;
+    rbBox.style.display = 'inline-flex';
+  } else if (rbBox) {
+    rbBox.style.display = 'none';
+  }
 
   // Description : DESCR + NOTE
   const desc = [attrs.DESCR, attrs.NOTE].filter(Boolean).join(' — ');
