@@ -3507,19 +3507,19 @@ require([
   arcgisView.ui.remove('zoom');
   clearTimeout(mapLoadTimeout); // ArcGIS a chargé — annuler le timeout d'erreur
   if (mapErrorEl) mapErrorEl.style.display = 'none';
-  // Limiter la navigation au Québec (+ buffer)
+  // Limiter la navigation au Québec — utiliser stationary pour éviter boucle infinie
   const QC_BOUNDS = { xmin: -84, ymin: 43, xmax: -52, ymax: 64 };
-  arcgisView.watch('extent', function(newExtent) {
-    if (!newExtent) return;
-    const cx = (newExtent.xmin + newExtent.xmax) / 2;
-    const cy = (newExtent.ymin + newExtent.ymax) / 2;
+  arcgisView.watch('stationary', function(isStationary) {
+    if (!isStationary || !arcgisView.extent) return;
+    const cx = arcgisView.center.longitude;
+    const cy = arcgisView.center.latitude;
     let nx = cx, ny = cy, clamped = false;
     if (cx < QC_BOUNDS.xmin) { nx = QC_BOUNDS.xmin; clamped = true; }
     if (cx > QC_BOUNDS.xmax) { nx = QC_BOUNDS.xmax; clamped = true; }
     if (cy < QC_BOUNDS.ymin) { ny = QC_BOUNDS.ymin; clamped = true; }
     if (cy > QC_BOUNDS.ymax) { ny = QC_BOUNDS.ymax; clamped = true; }
     if (clamped) {
-      arcgisView.goTo({ center: [nx, ny], zoom: arcgisView.zoom }, { animate: false });
+      arcgisView.goTo({ center: [nx, ny] }, { duration: 300 });
     }
   });
 
