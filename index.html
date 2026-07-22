@@ -3063,8 +3063,25 @@ async function loadElevation(attrs, lat, lng) {
       });
     });
     const minE  = Math.min(...elevs), maxE = Math.max(...elevs);
-    const gain  = elevs.reduce((a,e,i) => i>0 && e>elevs[i-1] ? a+(e-elevs[i-1]) : a, 0);
-    const loss  = elevs.reduce((a,e,i) => i>0 && e<elevs[i-1] ? a+(elevs[i-1]-e) : a, 0);
+
+    // Lissage par moyenne glissante (fenêtre adaptative selon nb de points)
+    function smoothElevs(arr, windowSize) {
+      const half = Math.floor(windowSize / 2);
+      return arr.map((_, i) => {
+        const start = Math.max(0, i - half);
+        const end   = Math.min(arr.length - 1, i + half);
+        const slice = arr.slice(start, end + 1);
+        return slice.reduce((s, v) => s + v, 0) / slice.length;
+      });
+    }
+    // Fenêtre plus large : ~20% du nombre de points, min 9, max 51
+    const winSize = Math.min(51, Math.max(9, Math.round(elevs.length * 0.20)));
+    // Double passe pour un lissage plus prononcé
+    const elevsSmooth = smoothElevs(smoothElevs(elevs, winSize), Math.floor(winSize / 2))
+      .map(v => Math.round(v)); // arrondir à l'unité (mètre)
+
+    const gain  = elevsSmooth.reduce((a,e,i) => i>0 && e>elevsSmooth[i-1] ? a+(e-elevsSmooth[i-1]) : a, 0);
+    const loss  = elevsSmooth.reduce((a,e,i) => i>0 && e<elevsSmooth[i-1] ? a+(elevsSmooth[i-1]-e) : a, 0);
 
     // Distances cumulées réelles (km)
     const dists = [0];
@@ -3076,67 +3093,133 @@ async function loadElevation(attrs, lat, lng) {
     const totalKm = dists[dists.length - 1];
 
     // Coordonnées SVG
-    const W = 290, H = 80, pad = { t:6, r:4, b:4, l:4 };
+    // ── Dimensions avec espace pour axes ─────────────────────────
+    const W = 290, H = 120, WFull = 326; // WFull inclut espace pour labels Y
+    const pad = { t: 10, r: 36, b: 26, l: 8 };
     const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
-    const range = maxE - minE || 1;
-    const n = elevs.length;
+    const minES = Math.min(...elevsSmooth), maxES = Math.max(...elevsSmooth);
+    const rangeS = maxES - minES || 1;
+    const n = elevsSmooth.length;
 
     const toX = i => pad.l + (i / (n - 1)) * iW;
-    const toY = e => pad.t + (1 - (e - minE) / range) * iH;
-    const ptCoords = elevs.map((e, i) => ({ x: toX(i), y: toY(e) }));
+    const toY = e => pad.t + (1 - (e - minES) / rangeS) * iH;
+    // ptCoords calculé après toYvis (défini dans grille Y)
 
-    // Polyline lissée via cubic bezier
+    // Polyline lissée cubic bezier
     function smoothPath(coords) {
       if (coords.length < 2) return '';
-      let d = `M ${coords[0].x} ${coords[0].y}`;
+      let d = `M ${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`;
       for (let i = 1; i < coords.length; i++) {
-        const prev = coords[i-1], curr = coords[i];
-        const cpx = (prev.x + curr.x) / 2;
-        d += ` C ${cpx} ${prev.y} ${cpx} ${curr.y} ${curr.x} ${curr.y}`;
+        const p = coords[i-1], c = coords[i];
+        const cpx = ((p.x + c.x) / 2).toFixed(1);
+        d += ` C ${cpx} ${p.y.toFixed(1)} ${cpx} ${c.y.toFixed(1)} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`;
       }
       return d;
     }
-    const linePath  = smoothPath(ptCoords);
-    const areaPath  = linePath + ` L ${ptCoords[n-1].x} ${H-pad.b} L ${pad.l} ${H-pad.b} Z`;
 
-    // Grille horizontale légère
-    const gridLines = [0, 0.5, 1].map(t => {
-      const y = pad.t + t * iH;
-      const e = Math.round(maxE - t * range);
-      return `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="#e8eef8" stroke-width="0.7"/>
-              <text x="${pad.l}" y="${y-1.5}" font-size="6" fill="#bbb" font-family="Arial">${e}m</text>`;
+
+    // ── Grille Y — intervalles égaux ────────────────────────────
+    const step = rangeS <= 2 ? 1 : rangeS <= 10 ? 2 : rangeS <= 30 ? 5 : rangeS <= 100 ? 10 : 50;
+    const yBot = Math.ceil(minES / step) * step;
+    const yTop = Math.floor(maxES / step) * step;
+    const yVals = [];
+    for (let v = yBot; v <= yTop; v += step) { if (yVals.length < 5) yVals.push(v); }
+    if (yVals.length === 0) yVals.push(Math.round((minES + maxES) / 2));
+
+    // Range minimum visuel pour éviter une ligne plate invisible
+    const visRange = Math.max(rangeS, 4);
+    const visMid   = (minES + maxES) / 2;
+    const visMin   = visMid - visRange / 2;
+    const toYvis   = e => pad.t + (1 - (e - visMin) / visRange) * iH;
+
+    // ptCoords utilise toYvis — défini ici après toYvis
+    const ptCoords = elevsSmooth.map((e, i) => ({ x: toX(i), y: toYvis(e) }));
+
+    const linePath = smoothPath(ptCoords);
+    const areaPath = linePath + ` L ${(pad.l+iW).toFixed(1)} ${pad.t+iH} L ${pad.l} ${pad.t+iH} Z`;
+
+    const gridY = yVals.map(v => {
+      const y = toYvis(v).toFixed(1);
+      return `<line x1="${pad.l}" y1="${y}" x2="${pad.l+iW}" y2="${y}" stroke="#e0ecf4" stroke-width="0.8" stroke-dasharray="3 2"/>`;
+    }).join('');
+    const gridYLabels = yVals.map(v => {
+      const y = toYvis(v).toFixed(1);
+      const yAdj = Math.max(pad.t + 6, Math.min(pad.t + iH, parseFloat(y) + 3));
+      return `<text x="${pad.l+iW+3}" y="${yAdj.toFixed(1)}" font-size="8" fill="#999" font-family="Arial,sans-serif">${Math.round(v)}m</text>`;
+    }).join('');
+
+    // ── Axe X : ticks SVG + labels HTML séparés ──────────────────
+    const kmStep = totalKm <= 5 ? 1 : totalKm <= 20 ? 5 : totalKm <= 50 ? 10 : totalKm <= 100 ? 20 : 50;
+    const xKmData = [];
+    const roundedKm = Math.floor(totalKm / kmStep) * kmStep;
+    for (let km = 0; km <= roundedKm; km += kmStep) {
+      const frac = km / totalKm;
+      const x = pad.l + frac * iW;
+      const pct = (x - pad.l) / iW * 100; // % pour positionnement CSS
+      xKmData.push({ km, label: (totalKm - km).toFixed(0), x, pct });
+    }
+    const xKmTicks = xKmData.map(d =>
+      `<line x1="${d.x.toFixed(1)}" y1="${pad.t+iH}" x2="${d.x.toFixed(1)}" y2="${pad.t+iH+4}" stroke="#ccc" stroke-width="0.8"/>`
+    ).join('');
+    // Labels HTML positionnés en % de la largeur du graphique
+    const xKmLabelsHTML = xKmData.map(d =>
+      `<span style="position:absolute;left:calc(${(pad.l/W*100).toFixed(1)}% + ${d.pct.toFixed(1)}% * ${(iW/W).toFixed(3)});transform:translateX(-50%);font-size:9px;color:#aaa;font-family:Arial,sans-serif">${d.label} km</span>`
+    ).join('');
+
+    // ── Couleur de la ligne selon la pente (vert → jaune → rouge) ─
+    const slopeSegments = ptCoords.map((pt, i) => {
+      if (i === 0) return '';
+      const prev = ptCoords[i-1];
+      const dElev = elevsSmooth[i-1] - elevsSmooth[i]; // descente = positif
+      const dDist = totalKm / n;
+      const slope = dDist > 0 ? (dElev / (dDist * 1000)) * 100 : 0; // %
+      const color = slope > 0.5 ? '#ef4444' : slope > 0.2 ? '#f59e0b' : '#00b4d8';
+      return `<line x1="${prev.x.toFixed(1)}" y1="${prev.y.toFixed(1)}" x2="${pt.x.toFixed(1)}" y2="${pt.y.toFixed(1)}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
     }).join('');
 
     el.innerHTML = `
-      <div class="elev-chart-wrap" id="elev-wrap">
-        <svg class="elev-chart" id="elev-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <div class="elev-chart-wrap" id="elev-wrap" style="margin-bottom:4px">
+        <svg class="elev-chart" id="elev-svg" viewBox="0 0 ${WFull} ${H}" preserveAspectRatio="none"
+             style="width:100%;height:auto;display:block;overflow:visible">
           <defs>
             <linearGradient id="elevGrad2" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#00b4d8" stop-opacity="0.28"/>
+              <stop offset="0%" stop-color="#00b4d8" stop-opacity="0.25"/>
               <stop offset="100%" stop-color="#00b4d8" stop-opacity="0.02"/>
             </linearGradient>
             <clipPath id="elevClip"><rect x="${pad.l}" y="${pad.t}" width="${iW}" height="${iH}"/></clipPath>
           </defs>
-          ${gridLines}
+          <!-- Fond vert dégradé -->
           <path d="${areaPath}" fill="url(#elevGrad2)" clip-path="url(#elevClip)"/>
-          <path d="${linePath}" fill="none" stroke="#00b4d8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#elevClip)"/>
-          <!-- Ligne verticale du throttle -->
-          <line id="elev-vline" x1="0" y1="${pad.t}" x2="0" y2="${H-pad.b}"
-                stroke="var(--brand)" stroke-width="1.2" stroke-dasharray="3 2"
-                opacity="0" pointer-events="none"/>
-          <!-- Point sur la courbe -->
-          <circle id="elev-dot" cx="0" cy="0" r="4"
-                  fill="var(--brand)" stroke="#fff" stroke-width="1.8"
+          <!-- Grille Y -->
+          ${gridY}
+          <!-- Axe X : seulement les ticks, pas les labels -->
+          ${xKmTicks}
+          <!-- Ligne de pente colorée -->
+          <g clip-path="url(#elevClip)">${slopeSegments}</g>
+          <!-- Labels axe Y (hors clipPath) -->
+          ${gridYLabels}
+          <!-- Ligne verticale cursor -->
+          <line id="elev-vline" x1="0" y1="${pad.t}" x2="0" y2="${pad.t+iH}"
+                stroke="#555" stroke-width="1" opacity="0" pointer-events="none"/>
+          <!-- Point cursor -->
+          <circle id="elev-dot" cx="0" cy="0" r="3.5"
+                  fill="#fff" stroke="#333" stroke-width="1.5"
                   opacity="0" pointer-events="none"/>
         </svg>
-        <!-- Tooltip -->
         <div class="elev-tooltip" id="elev-tip">
           <div class="elev-tooltip-bubble" id="elev-tip-txt"></div>
         </div>
       </div>
-      <div class="elev-stats">
-        <div class="elev-stat"><div class="elev-stat-lbl">Min</div><div class="elev-stat-val">${Math.round(minE)} m</div></div>
-        <div class="elev-stat"><div class="elev-stat-lbl">Max</div><div class="elev-stat-val">${Math.round(maxE)} m</div></div>
+      <!-- Labels axe X en HTML -->
+      <div style="position:relative;height:16px;margin:0 0 6px">${xKmLabelsHTML}</div>
+      <!-- Position / Altitude au survol -->
+      <div style="display:flex;gap:16px;font-family:Arial,sans-serif;font-size:11px;padding:4px 2px 6px;border-top:1px solid #f0f0f0">
+        <div><span style="color:#aaa;font-size:9px;text-transform:uppercase;letter-spacing:.05em;display:block">Position</span><span id="elev-pos-val" style="font-weight:700;color:#333">--</span></div>
+        <div><span style="color:#aaa;font-size:9px;text-transform:uppercase;letter-spacing:.05em;display:block">Altitude</span><span id="elev-alt-val" style="font-weight:700;color:#333">--</span></div>
+      </div>
+      <div class="elev-stats" style="margin-top:6px">
+        <div class="elev-stat"><div class="elev-stat-lbl">Min</div><div class="elev-stat-val">${Math.round(minES)} m</div></div>
+        <div class="elev-stat"><div class="elev-stat-lbl">Max</div><div class="elev-stat-val">${Math.round(maxES)} m</div></div>
         <div class="elev-stat"><div class="elev-stat-lbl">Dénivelé +</div><div class="elev-stat-val">+${Math.round(gain)} m</div></div>
         <div class="elev-stat"><div class="elev-stat-lbl">Dénivelé −</div><div class="elev-stat-val">−${Math.round(loss)} m</div></div>
       </div>`;
@@ -3168,8 +3251,10 @@ async function loadElevation(attrs, lat, lng) {
     function onMove(e) {
       const rect    = wrap.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const pct     = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const idx     = Math.round(pct * (n - 1));
+      // Tenir compte du padding gauche dans le calcul
+      const rawPct  = (clientX - rect.left) / rect.width;
+      const pct     = Math.max(0, Math.min(1, (rawPct * W - pad.l) / iW));
+      const idx     = Math.min(n - 1, Math.max(0, Math.round(pct * (n - 1))));
       const pt      = ptCoords[idx];
 
       // SVG → px
@@ -3182,12 +3267,19 @@ async function loadElevation(attrs, lat, lng) {
       dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
       dot.setAttribute('opacity', '1');
 
-      // Tooltip
-      const elev = Math.round(elevs[idx]);
-      const dist = dists[idx].toFixed(1);
+      // Afficher Position + Altitude style Cartes Plein-air
+      const elev = Math.round(elevsSmooth[idx]) | 0;  // force entier
+      const dist = dists[Math.min(idx, dists.length-1)]?.toFixed(1) || '--';
+      const posEl = document.getElementById('elev-pos-val');
+      const altEl = document.getElementById('elev-alt-val');
+      if (posEl) posEl.textContent = dist + ' km';
+      if (altEl) altEl.textContent = elev + ' m';
+
+      // Tooltip léger
       tipTxt.innerHTML = `${elev} m<span>${dist} km</span>`;
       tip.classList.add('visible');
-      tip.style.left = `${px}px`;
+      tip.style.left = `${Math.min(px, rect.width - 70)}px`;
+      tip.style.top  = `${Math.max(0, py - 28)}px`;
       tip.style.top  = `${Math.max(0, py - 26)}px`;
 
       // ── Marqueur sur la carte ──────────────────────────────────
@@ -3229,7 +3321,11 @@ async function loadElevation(attrs, lat, lng) {
     wrap.addEventListener('touchend',   onLeave);
 
   } catch {
-    el.innerHTML = `<div class="elev-loading">Profil indisponible.<br><span style="font-size:10px">API hors ligne</span></div>`;
+    el.innerHTML = `<div class="elev-loading">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ddd" stroke-width="1.5" style="margin-bottom:6px"><path d="M3 17l6-8 4 5 3-4 5 7H3z"/><circle cx="18" cy="6" r="2"/></svg>
+      <div>Profil temporairement indisponible</div>
+      <div style="font-size:10px;margin-top:3px;color:#ccc">Le service d'élévation Esri est hors ligne.<br>Réessayez dans quelques minutes.</div>
+    </div>`;
   }
 }
 
